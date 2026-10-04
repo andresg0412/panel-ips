@@ -1,0 +1,26 @@
+name: panel-ips
+
+services:
+  panel:
+    build: .
+    container_name: panel-ips
+    restart: unless-stopped
+    env_file: .env
+    # Solo escucha en localhost: el acceso desde internet pasa por nginx (HTTPS + usuario/contraseña).
+    ports:
+      - "127.0.0.1:8100:8100"
+    networks:
+      - shared_network
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8100/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  # Red de proyecto-ips: permite llegar a Postgres por el nombre del contenedor
+  # (ips-centro-orientacion-db-1) sin pasar por el puerto público 5434.
+  shared_network:
+    external: true

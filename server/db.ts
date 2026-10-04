@@ -1,0 +1,33 @@
+import pg from 'pg';
+
+// Los DATE de Postgres llegan como texto 'YYYY-MM-DD' (sin conversión a Date con zona horaria)
+// y los BIGINT de COUNT/SUM como número: los valores del panel nunca se acercan a 2^53.
+pg.types.setTypeParser(pg.types.builtins.DATE, (v) => v);
+pg.types.setTypeParser(pg.types.builtins.INT8, (v) => Number(v));
+pg.types.setTypeParser(pg.types.builtins.NUMERIC, (v) => Number(v));
+pg.types.setTypeParser(pg.types.builtins.TIMESTAMP, (v) => v.replace(' ', 'T').slice(0, 19));
+
+// Pool pequeño a propósito: el panel comparte Postgres con el backend del bot.
+// El rol panel_lectura además tiene CONNECTION LIMIT 5, read-only y statement_timeout propios.
+export const pool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: 3,
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 5_000,
+  statement_timeout: 15_000,
+  application_name: 'panel-ips',
+});
+
+pool.on('error', (err) => {
+  console.error('Error en conexión inactiva de Postgres:', err.message);
+});
+
+export async function query<T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> {
+  const res = await pool.query(sql, params);
+  return res.rows as T[];
+}
+
+export async function queryOne<T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T> {
+  const rows = await query<T>(sql, params);
+  return rows[0];
+}
