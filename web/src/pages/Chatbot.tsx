@@ -17,16 +17,23 @@ interface Datos {
 }
 interface Paso {
   paso: string;
-  descripcion: string;
+  descripcion: string | null;
   llegaron: number;
   terminaron: number;
   abandonaron: number;
 }
 
+/** 'agendar.s08_fechas' → 'Fechas'. Se usa cuando el catálogo de pasos no trae una descripción legible. */
+function nombrePaso(p: Paso): string {
+  if (p.descripcion && !/\.ts$/.test(p.descripcion)) return p.descripcion;
+  const h = p.paso.replace(/^[^.]*\./, '').replace(/^[a-z]+\d+_/, '').replace(/_/g, ' ');
+  return h.charAt(0).toUpperCase() + h.slice(1);
+}
+
 const FLUJOS = ['agendar', 'cancelar', 'reprogramar', 'campana_respuesta', 'lista_espera'];
 
 const COLS_PASO: Columna<Paso>[] = [
-  { clave: 'descripcion', titulo: 'Paso' },
+  { clave: 'descripcion', titulo: 'Paso', formato: (_v, f) => nombrePaso(f), csv: (_v, f) => nombrePaso(f) },
   { clave: 'llegaron', titulo: 'Llegaron', num: true },
   { clave: 'abandonaron', titulo: 'Abandonaron aquí', num: true },
   { clave: 'terminaron', titulo: 'Terminaron aquí', num: true },

@@ -16,8 +16,9 @@ export default async function rutasChatbot(app: FastifyInstance) {
           `SELECT count(*) AS sesiones,
                   count(DISTINCT telefono_norm) AS personas,
                   count(*) FILTER (WHERE estado_calc = 'abandonada') AS abandonadas,
-                  round(percentile_cont(0.5) WITHIN GROUP (ORDER BY duracion_min)::numeric, 1) AS mediana_min,
-                  round(avg(mensajes_entrantes)::numeric, 1) AS mensajes_promedio
+                  -- Las sesiones reconstruidas del histórico (backfill) no tienen duración ni mensajes.
+                  round((percentile_cont(0.5) WITHIN GROUP (ORDER BY duracion_min) FILTER (WHERE NOT es_backfill))::numeric, 1) AS mediana_min,
+                  round((avg(mensajes_entrantes) FILTER (WHERE NOT es_backfill))::numeric, 1) AS mensajes_promedio
              FROM bi.fact_sesiones WHERE fecha_bogota BETWEEN $1 AND $2`,
           p,
         ),
@@ -66,7 +67,7 @@ export default async function rutasChatbot(app: FastifyInstance) {
       const [pasos, desde] = await Promise.all([
         query(
           `SELECT e.paso, min(e.orden) AS orden, bool_or(e.es_final) AS es_final,
-                  coalesce(max(d.descripcion), e.paso) AS descripcion,
+                  max(d.descripcion) AS descripcion,
                   sum(e.sesiones_llegaron) AS llegaron,
                   sum(e.sesiones_terminaron_ahi) AS terminaron,
                   sum(e.sesiones_abandonaron_ahi) AS abandonaron

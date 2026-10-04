@@ -36,7 +36,8 @@ interface Datos {
   cambios: Cambio[];
 }
 
-const GRUPOS = ['Asistió', 'No asistió', 'Cancelada', 'Reprogramada', 'Programada', 'Otro'];
+// Mismo orden que los colores fijos (s1..s5): evita que el amarillo quede junto al naranja.
+const GRUPOS = ['Asistió', 'Cancelada', 'Reprogramada', 'No asistió', 'Programada', 'Otro'];
 const tasa = (f: PorEstado) => (f.asistio + f.no_asistio ? f.asistio / (f.asistio + f.no_asistio) : null);
 
 const colsEstado = (titulo: string): Columna<PorEstado>[] => [
@@ -80,7 +81,7 @@ export default function Agenda({ rango }: { rango: Rango }) {
 
   const optDia = useCallback(
     () => ranking(
-      data!.diaSemana.filter((d) => d.asistio + d.no_asistio > 0).map((d) => ({ nombre: DIAS[d.dia!], valor: tasa(d) ?? 0 })).reverse(),
+      data!.diaSemana.filter((d) => d.asistio + d.no_asistio > 0).map((d) => ({ nombre: DIAS[d.dia!], valor: tasa(d) ?? 0 })),
       (v) => `${(v * 100).toFixed(0)} %`,
     ),
     [data],

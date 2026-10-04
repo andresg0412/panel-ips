@@ -30,6 +30,8 @@ async function indicadores(desde: string, hasta: string) {
               count(*) FILTER (WHERE entregado) AS entregados,
               count(*) FILTER (WHERE leido) AS leidos,
               count(*) FILTER (WHERE estado_respuesta IN ('respondio', 'respondio_tarde')) AS respondieron,
+              -- Base de la tasa de respuesta: sin el recordatorio de 2 h ni los avisos a asesores, que no piden respuesta.
+              count(*) FILTER (WHERE estado NOT IN ('rechazado_api', 'failed') AND campana NOT IN ('daily', 'aviso_asesor')) AS enviados_con_respuesta,
               count(*) FILTER (WHERE cita_confirmada_despues) AS confirmaron
          FROM bi.fact_envios
         WHERE fecha_bogota BETWEEN $1 AND $2 AND tipo_envio = 'plantilla'`,

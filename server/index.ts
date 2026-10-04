@@ -53,9 +53,20 @@ await app.register(rutasSistema);
 // Frontend compilado (dist/web). En desarrollo lo sirve Vite con proxy a /api.
 const webDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 if (existsSync(webDir)) {
-  await app.register(fastifyStatic, { root: webDir, wildcard: false });
+  // Los assets llevan hash en el nombre: se cachean un año. index.html nunca, para que tras un
+  // despliegue el navegador pida siempre la versión nueva.
+  await app.register(fastifyStatic, {
+    root: webDir,
+    cacheControl: false,
+    setHeaders: (res, ruta) =>
+      res.setHeader('Cache-Control', ruta.includes(`${join('web', 'assets')}`) ? 'public, max-age=31536000, immutable' : 'no-cache'),
+  });
+  // Rutas desconocidas de la SPA → index.html. Las de /api y /assets responden 404 de verdad,
+  // para que un asset faltante no se sirva como HTML.
   app.setNotFoundHandler((req, reply) =>
-    req.url.startsWith('/api/') ? reply.code(404).send({ error: 'No existe' }) : reply.sendFile('index.html'),
+    req.url.startsWith('/api/') || req.url.startsWith('/assets/')
+      ? reply.code(404).send({ error: 'No existe' })
+      : reply.header('Cache-Control', 'no-cache').sendFile('index.html'),
   );
 }
 

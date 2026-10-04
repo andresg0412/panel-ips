@@ -103,6 +103,7 @@ main { padding: 24px 28px 48px; min-width: 0; }
 .card h3 { margin: 0 0 2px; font-size: 15px; }
 .card .ayuda { margin: 0 0 12px; color: var(--muted); font-size: 12.5px; }
 .card + .card, .grid + .card, .card + .grid, .grid + .grid { margin-top: 16px; }
+.grid > .card { margin-top: 0; }
 
 .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
 .kpi .etiqueta { color: var(--ink-2); font-size: 12.5px; }

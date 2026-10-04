@@ -15,10 +15,11 @@ interface DatosSeries {
   sesiones: { periodo: string; completadas: number; abandonadas: number }[];
 }
 
-const GRUPOS = ['Asistió', 'No asistió', 'Cancelada', 'Reprogramada', 'Programada', 'Otro'];
+// Mismo orden que los colores fijos (s1..s5): evita que el amarillo quede junto al naranja.
+const GRUPOS = ['Asistió', 'Cancelada', 'Reprogramada', 'No asistió', 'Programada', 'Otro'];
 
 const asistencia = (c: N) => ratio(c.asistio, c.asistio + c.no_asistio);
-const respuesta = (e: N) => ratio(e.respondieron, e.enviados);
+const respuesta = (e: N) => ratio(e.respondieron, e.enviados_con_respuesta);
 
 export default function Resumen({ rango }: { rango: Rango }) {
   const r = useApi<DatosResumen>(conRango('/api/resumen', rango), 120_000);
@@ -51,7 +52,7 @@ export default function Resumen({ rango }: { rango: Rango }) {
           <Kpi etiqueta="Citas canceladas" actual={a.citas.canceladas} anterior={p.citas.canceladas} mejorSiSube={false} />
           <Kpi etiqueta="Citas nuevas registradas" actual={a.citas.registradas} anterior={p.citas.registradas} />
           <Kpi etiqueta="Mensajes de campaña enviados" actual={a.envios.enviados} anterior={p.envios.enviados} />
-          <Kpi etiqueta="Pacientes que respondieron" formato="pct" actual={respuesta(a.envios)} anterior={respuesta(p.envios)} />
+          <Kpi etiqueta="Respondieron a los mensajes" formato="pct" actual={respuesta(a.envios)} anterior={respuesta(p.envios)} />
           <Kpi etiqueta="Citas confirmadas tras un mensaje" actual={a.envios.confirmaron} anterior={p.envios.confirmaron} />
           <Kpi etiqueta="Conversaciones con el bot" actual={a.sesiones.total} anterior={p.sesiones.total} />
         </div>
