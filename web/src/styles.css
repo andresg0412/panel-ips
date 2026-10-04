@@ -70,6 +70,36 @@
   }
 }
 
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #232321;
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --border: rgba(255, 255, 255, 0.1);
+  --accent: #3987e5;
+  --accent-soft: #1c2a3d;
+  --up: #0ca30c;
+  --down: #e66767;
+  --s1: #3987e5;
+  --s2: #d95926;
+  --s3: #199e70;
+  --s4: #c98500;
+  --s5: #d55181;
+  --s6: #008300;
+  --s7: #9085e9;
+  --s8: #e66767;
+  --s-other: #5c5b56;
+  --seq-0: #2a2a28;
+  --seq-1: #184f95;
+  --seq-2: #256abf;
+  --seq-3: #3987e5;
+  --seq-4: #86b6ef;
+}
+
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body { background: var(--page); color: var(--ink); font-size: 14px; line-height: 1.45; }
@@ -138,9 +168,33 @@ tr:hover td { background: var(--surface-2); }
 .resultado-busqueda { cursor: pointer; }
 
 @media (max-width: 900px) {
-  .app { grid-template-columns: 1fr; }
-  .nav { position: static; height: auto; display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 16px; }
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .nav { position: sticky; top: 0; z-index: 5; height: auto; display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 4px; padding: 10px 16px; border-right: 0; border-bottom: 1px solid var(--border); }
+  .nav a { white-space: nowrap; margin: 0; }
+  .rango input[type='date'] { flex: 1 1 130px; }
   .nav h1, .nav .sub, .nav .usuario { display: none; }
   main { padding: 16px; }
   .g2, .g3 { grid-template-columns: 1fr; }
+}
+
+/* Barra superior: actualización, tema e impresión */
+.herramientas { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--muted); font-size: 12.5px; }
+.herramientas select, .herramientas button { border: 1px solid var(--border); background: var(--surface); border-radius: 8px; padding: 5px 9px; cursor: pointer; }
+.nav .pie { position: absolute; bottom: 16px; left: 20px; right: 12px; display: grid; gap: 8px; color: var(--muted); font-size: 12px; }
+.nav .pie select { border: 1px solid var(--border); background: var(--surface); border-radius: 8px; padding: 4px 6px; }
+
+@media (max-width: 900px) {
+  .nav .pie { display: none; }
+}
+
+/* Impresión / guardar como PDF: solo el contenido, en claro, sin cortar tarjetas. */
+@media print {
+  :root { color-scheme: light; }
+  .nav, .rango, .herramientas, .boton, .filtros { display: none !important; }
+  .app { display: block; }
+  main { padding: 0; }
+  body { background: #fff; }
+  .card, .kpi { break-inside: avoid; box-shadow: none; }
+  .tabla-wrap { max-height: none; overflow: visible; }
+  .cabecera::after { content: attr(data-impreso); display: block; color: #555; font-size: 12px; margin-top: 4px; }
 }

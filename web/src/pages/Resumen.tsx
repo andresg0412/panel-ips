@@ -11,7 +11,7 @@ interface DatosResumen { actual: Indicadores; anterior: Indicadores }
 interface DatosSeries {
   rango: { grano: string };
   citas: { periodo: string; grupo: string | null; n: number }[];
-  envios: { periodo: string; enviados: number; respondieron: number }[];
+  envios: { periodo: string; enviados: number; respondieron: number; fallidos: number }[];
   sesiones: { periodo: string; completadas: number; abandonadas: number }[];
 }
 
@@ -32,7 +32,7 @@ export default function Resumen({ rango }: { rango: Rango }) {
   }, [s.data]);
   const optEnvios = useCallback(() => {
     const d = s.data!;
-    return lineas(d.envios.map((e) => e.periodo), { Enviados: d.envios.map((e) => e.enviados), Respondieron: d.envios.map((e) => e.respondieron) }, d.rango.grano);
+    return lineas(d.envios.map((e) => e.periodo), { Enviados: d.envios.map((e) => e.enviados), Respondieron: d.envios.map((e) => e.respondieron), Fallidos: d.envios.map((e) => e.fallidos) }, d.rango.grano);
   }, [s.data]);
   const optSesiones = useCallback(() => {
     const d = s.data!;
@@ -65,7 +65,7 @@ export default function Resumen({ rango }: { rango: Rango }) {
             <Grafico opcion={optCitas} />
           </Tarjeta>
           <div className="grid g2">
-            <Tarjeta titulo="Mensajes de campaña" ayuda="Enviados aceptados por WhatsApp y cuántos pacientes respondieron.">
+            <Tarjeta titulo="Mensajes de campaña" ayuda="Enviados: aceptados por WhatsApp. Fallidos: WhatsApp rechazó el envío y el paciente no recibió nada.">
               <Grafico opcion={optEnvios} alto={260} />
             </Tarjeta>
             <Tarjeta titulo="Conversaciones con el bot" ayuda="Abandonada: el paciente dejó de responder antes de terminar.">

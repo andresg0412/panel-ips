@@ -95,7 +95,8 @@ export default async function rutasResumen(app: FastifyInstance) {
           `WITH p AS (${PERIODOS})
            SELECT p.periodo,
                   count(e.*) FILTER (WHERE e.estado NOT IN ('rechazado_api', 'failed')) AS enviados,
-                  count(e.*) FILTER (WHERE e.estado_respuesta IN ('respondio', 'respondio_tarde')) AS respondieron
+                  count(e.*) FILTER (WHERE e.estado_respuesta IN ('respondio', 'respondio_tarde')) AS respondieron,
+                  count(e.*) FILTER (WHERE e.estado IN ('rechazado_api', 'failed')) AS fallidos
              FROM p
              LEFT JOIN bi.fact_envios e
                ON ${periodo('e.fecha_bogota')} = p.periodo

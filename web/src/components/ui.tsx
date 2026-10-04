@@ -47,7 +47,7 @@ export function Kpi({ etiqueta, valor, actual, anterior, mejorSiSube = true, for
         </span>
       );
     } else {
-      delta = <span className="delta">sin datos en el período anterior</span>;
+      delta = <span className="delta">0 en el período anterior</span>;
     }
   }
   return (

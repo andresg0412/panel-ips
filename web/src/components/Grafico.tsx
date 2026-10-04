@@ -12,14 +12,25 @@ export function token(nombre: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(`--${nombre}`).trim();
 }
 
-/** Se re-renderiza cuando el sistema cambia entre modo claro y oscuro. */
+/** Tema efectivo: el elegido por el usuario (data-theme) o, si es automático, el del sistema. */
+export function temaOscuro(): boolean {
+  const t = document.documentElement.dataset.theme;
+  return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+/** Se re-renderiza cuando cambia el tema del sistema o el elegido en el panel. */
 function useEsquema() {
-  const [esquema, setEsquema] = useState(() => matchMedia('(prefers-color-scheme: dark)').matches);
+  const [esquema, setEsquema] = useState(temaOscuro);
   useEffect(() => {
+    const fn = () => setEsquema(temaOscuro());
     const mq = matchMedia('(prefers-color-scheme: dark)');
-    const fn = () => setEsquema(mq.matches);
     mq.addEventListener('change', fn);
-    return () => mq.removeEventListener('change', fn);
+    const mo = new MutationObserver(fn);
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => {
+      mq.removeEventListener('change', fn);
+      mo.disconnect();
+    };
   }, []);
   return esquema;
 }

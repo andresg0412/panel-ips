@@ -17,6 +17,11 @@ const COLOR_FIJO: Record<string, string> = {
   daily: 's3',
   recuperacion: 's4',
   conasistencia: 's5',
+  Enviados: 's1',
+  Respondieron: 's3',
+  Fallidos: 's8',
+  Completadas: 's1',
+  Abandonadas: 's2',
   Otras: 's-other',
   Otro: 's-other',
 };
