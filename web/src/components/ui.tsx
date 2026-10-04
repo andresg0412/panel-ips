@@ -74,6 +74,8 @@ export interface Columna<T> {
   csv?: (v: any, fila: T) => string;
   /** Valor para ordenar cuando la columna es calculada (por defecto el valor crudo). */
   orden?: (fila: T) => number | string | null;
+  /** Texto largo: se ajusta en varias líneas en vez de ensanchar la tabla. */
+  envolver?: boolean;
 }
 
 function aCsv<T>(filas: T[], cols: Columna<T>[]): string {
@@ -142,7 +144,7 @@ export function Tabla<T extends Record<string, any>>({ filas, columnas, nombreCs
               ordenadas.map((f, i) => (
                 <tr key={i} onClick={alFila ? () => alFila(f) : undefined} className={alFila ? 'resultado-busqueda' : ''}>
                   {columnas.map((c, ci) => (
-                    <td key={ci} className={c.num ? 'num' : ''}>
+                    <td key={ci} className={c.num ? 'num' : ''} style={c.envolver ? { whiteSpace: 'normal', minWidth: 200 } : undefined}>
                       {c.formato ? c.formato(f[c.clave], f) : c.num ? num(f[c.clave]) : String(f[c.clave] ?? '—')}
                     </td>
                   ))}
@@ -182,6 +184,8 @@ export function rangoPreset(clave: string): Rango {
       return { desde: ini, hasta: fin };
     }
     case 'anio': return { desde: `${a}-01-01`, hasta: hoy };
+    // Inicio de los datos: agosto de 2025.
+    case 'todo': return { desde: '2025-08-01', hasta: hoy };
     default: return { desde: menosDias(hoy, 29), hasta: hoy };
   }
 }
@@ -193,6 +197,7 @@ const PRESETS: [string, string][] = [
   ['mes', 'Este mes'],
   ['mesant', 'Mes anterior'],
   ['anio', 'Este año'],
+  ['todo', 'Todo'],
 ];
 
 export function SelectorRango({ rango, preset, onCambio }: { rango: Rango; preset: string; onCambio: (r: Rango, preset: string) => void }) {

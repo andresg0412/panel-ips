@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useApi } from '../api';
+import { useApi, type Rango } from '../api';
+import { Pestanas, usePestana } from '../incidentes';
+import PacientesPanorama from './PacientesPanorama';
 import { Estado, Tabla, Tarjeta, type Columna } from '../components/ui';
 import { etiqueta, fecha, fechaHora, hora } from '../format';
 
@@ -54,7 +56,24 @@ const CAMPOS: [string, string][] = [
   ['registrado', 'Registrado en el sistema'],
 ];
 
-export default function Pacientes() {
+export default function Pacientes({ rango }: { rango: Rango }) {
+  const [vista, setVista] = usePestana<'panorama' | 'buscar'>(['panorama', 'buscar'], 'panorama');
+  return (
+    <>
+      <Pestanas
+        opciones={[
+          ['panorama', 'Panorama'],
+          ['buscar', 'Buscar un paciente'],
+        ]}
+        valor={vista}
+        onCambio={setVista}
+      />
+      {vista === 'panorama' ? <PacientesPanorama rango={rango} /> : <BuscarPaciente />}
+    </>
+  );
+}
+
+function BuscarPaciente() {
   const [texto, setTexto] = useState('');
   const [busqueda, setBusqueda] = useState('');
   const [id, setId] = useState<string | null>(null);

@@ -12,6 +12,8 @@ import rutasChatbot from './routes/chatbot.js';
 import rutasListaEspera from './routes/listaEspera.js';
 import rutasPacientes from './routes/pacientes.js';
 import rutasSistema from './routes/sistema.js';
+import rutasProfesionales from './routes/profesionales.js';
+import { INCIDENTES } from './incidentes.js';
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, trustProxy: true });
 
@@ -49,6 +51,10 @@ await app.register(rutasChatbot);
 await app.register(rutasListaEspera);
 await app.register(rutasPacientes);
 await app.register(rutasSistema);
+await app.register(rutasProfesionales);
+
+// Incidentes de datos conocidos (TR-01): el frontend los sombrea en los gráficos de tiempo.
+app.get('/api/incidentes', async () => ({ incidentes: INCIDENTES }));
 
 // Frontend compilado (dist/web). En desarrollo lo sirve Vite con proxy a /api.
 const webDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'web');

@@ -3,6 +3,7 @@ import { query, queryOne } from '../db.js';
 import { conCache } from '../cache.js';
 import { ErrorParametro, leerRango, leerTexto } from '../params.js';
 import { PERIODOS, periodo } from '../sql.js';
+import { FUERA_HORARIO } from './resumen.js';
 
 const FLUJOS_EMBUDO = new Set(['agendar', 'cancelar', 'reprogramar', 'campana_respuesta', 'lista_espera']);
 
@@ -11,14 +12,17 @@ export default async function rutasChatbot(app: FastifyInstance) {
     const r = leerRango(req.query as Record<string, unknown>);
     const p = [r.desde, r.hasta];
     return conCache(req.url, async () => {
-      const [kpis, serie, resultado, primerFlujo, motivoFin, mapaCalor] = await Promise.all([
+      const [kpis, serie, resultado, primerFlujo, motivoFin, mapaCalor, conversion] = await Promise.all([
         queryOne(
           `SELECT count(*) AS sesiones,
                   count(DISTINCT telefono_norm) AS personas,
                   count(*) FILTER (WHERE estado_calc = 'abandonada') AS abandonadas,
                   -- Las sesiones reconstruidas del histórico (backfill) no tienen duración ni mensajes.
                   round((percentile_cont(0.5) WITHIN GROUP (ORDER BY duracion_min) FILTER (WHERE NOT es_backfill))::numeric, 1) AS mediana_min,
-                  round((avg(mensajes_entrantes) FILTER (WHERE NOT es_backfill))::numeric, 1) AS mensajes_promedio
+                  round((avg(mensajes_entrantes) FILTER (WHERE NOT es_backfill))::numeric, 1) AS mensajes_promedio,
+                  -- CHB-04: fuera del horario de recepción (antes de las 7, desde las 19, domingos).
+                  count(*) FILTER (WHERE ${FUERA_HORARIO}) AS fuera_horario,
+                  count(*) FILTER (WHERE resultado_negocio = 'fuera_horario') AS derivadas_fuera_horario
              FROM bi.fact_sesiones WHERE fecha_bogota BETWEEN $1 AND $2`,
           p,
         ),
@@ -53,8 +57,27 @@ export default async function rutasChatbot(app: FastifyInstance) {
             GROUP BY 1, 2`,
           p,
         ),
+        // CHB-01: de las conversaciones que entraron a un trámite (en cualquier momento, no solo como primer
+        // paso), cuántas terminaron con el resultado de ese trámite.
+        query(
+          `WITH ent AS (
+             SELECT DISTINCT sesion_id, flujo
+               FROM bi.fact_eventos
+              WHERE fecha_bogota BETWEEN $1 AND $2 AND sesion_id IS NOT NULL
+                AND flujo IN ('agendar', 'cancelar', 'reprogramar')
+           )
+           SELECT ent.flujo AS clave,
+                  count(*) AS entraron,
+                  count(*) FILTER (WHERE s.resultado_negocio = CASE ent.flujo WHEN 'agendar' THEN 'cita_creada'
+                                                                              WHEN 'cancelar' THEN 'cita_cancelada'
+                                                                              ELSE 'cita_reprogramada' END) AS lograron,
+                  count(*) FILTER (WHERE s.resultado_negocio IN ('derivado_agente', 'fuera_horario')) AS derivadas
+             FROM ent LEFT JOIN bi.fact_sesiones s USING (sesion_id)
+            GROUP BY 1 ORDER BY 2 DESC`,
+          p,
+        ),
       ]);
-      return { rango: r, kpis, serie, resultado, primerFlujo, motivoFin, mapaCalor };
+      return { rango: r, kpis, serie, resultado, primerFlujo, motivoFin, mapaCalor, conversion };
     });
   });
 

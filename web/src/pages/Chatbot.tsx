@@ -4,11 +4,21 @@ import Grafico, { base, token } from '../components/Grafico';
 import { barrasApiladas, ranking } from '../components/series';
 import { Estado, Kpi, Tabla, Tarjeta, type Columna } from '../components/ui';
 import { DIAS, etiqueta, fecha, num, pct } from '../format';
+import { AvisoIncidentes, useSombras } from '../incidentes';
 
 type Conteo = { clave: string; n: number };
 interface Datos {
   rango: { grano: string };
-  kpis: { sesiones: number; personas: number; abandonadas: number; mediana_min: number | null; mensajes_promedio: number | null };
+  kpis: {
+    sesiones: number;
+    personas: number;
+    abandonadas: number;
+    mediana_min: number | null;
+    mensajes_promedio: number | null;
+    fuera_horario: number;
+    derivadas_fuera_horario: number;
+  };
+  conversion: { clave: string; entraron: number; lograron: number; derivadas: number }[];
   serie: { periodo: string; completadas: number; abandonadas: number }[];
   resultado: Conteo[];
   primerFlujo: Conteo[];
@@ -43,10 +53,11 @@ export default function Chatbot({ rango }: { rango: Rango }) {
   const { data, error, cargando } = useApi<Datos>(conRango('/api/chatbot', rango), 60_000);
   const [flujo, setFlujo] = useState('agendar');
   const embudo = useApi<{ pasos: Paso[]; datosDesde: string | null }>(conRango('/api/chatbot/embudo', rango, { flujo }), 120_000);
+  const sombras = useSombras(['conversaciones']);
 
   const optSerie = useCallback(
-    () => barrasApiladas(data!.serie.map((s) => s.periodo), { Completadas: data!.serie.map((s) => s.completadas), Abandonadas: data!.serie.map((s) => s.abandonadas) }, data!.rango.grano),
-    [data],
+    () => barrasApiladas(data!.serie.map((s) => s.periodo), { Completadas: data!.serie.map((s) => s.completadas), Abandonadas: data!.serie.map((s) => s.abandonadas) }, data!.rango.grano, sombras),
+    [data, sombras],
   );
   const optResultado = useCallback(() => ranking(data!.resultado.map((r) => ({ nombre: etiqueta(r.clave), valor: r.n }))), [data]);
   const optFlujo = useCallback(() => ranking(data!.primerFlujo.slice(0, 10).map((r) => ({ nombre: etiqueta(r.clave), valor: r.n }))), [data]);
@@ -77,6 +88,7 @@ export default function Chatbot({ rango }: { rango: Rango }) {
 
   return (
     <>
+      <AvisoIncidentes rango={rango} areas={['conversaciones']} compara={false} />
       <Estado cargando={cargando} error={error} hayDatos={!!data} />
       {data && k && (
         <>
@@ -85,7 +97,33 @@ export default function Chatbot({ rango }: { rango: Rango }) {
             <Kpi etiqueta="Personas distintas" actual={k.personas} />
             <Kpi etiqueta="Abandonadas" valor={pct(k.abandonadas, k.sesiones)} actual={null} />
             <Kpi etiqueta="Duración típica" valor={k.mediana_min === null ? '—' : `${String(k.mediana_min).replace('.', ',')} min`} actual={null} />
+            <Kpi etiqueta="Fuera del horario de recepción" valor={pct(k.fuera_horario, k.sesiones, 0)} actual={null} />
           </div>
+          <Tarjeta
+            titulo="¿Cuántos logran lo que vinieron a hacer?"
+            ayuda="De las conversaciones que entraron a cada trámite, cuántas terminaron con el trámite hecho. El resto abandonó, pidió un asesor o no encontró lo que buscaba."
+          >
+            <div className="cifras">
+              {data.conversion.map((c) => (
+                <div className="cifra" key={c.clave}>
+                  <div className="n">{pct(c.lograron, c.entraron, 0)}</div>
+                  <div className="t">
+                    <b>{etiqueta(c.clave)}</b>: {num(c.lograron)} de {num(c.entraron)} conversaciones
+                    {c.derivadas > 0 ? ` · ${num(c.derivadas)} pasaron a un asesor` : ''}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {data.conversion.some((c) => c.clave === 'agendar' && c.entraron > 0 && c.lograron / c.entraron < 0.3) && (
+              <p className="nota">
+                Agendar convierte poco. Una causa conocida: el registro de pacientes nuevos por el bot falla desde septiembre de 2025, así que solo agendan
+                pacientes ya registrados. Vea el recorrido paso a paso más abajo para saber dónde se quedan.
+              </p>
+            )}
+            {k.derivadas_fuera_horario > 0 && (
+              <p className="nota">{num(k.derivadas_fuera_horario)} personas pidieron un asesor fuera de horario y no pudieron ser atendidas en el momento.</p>
+            )}
+          </Tarjeta>
           <Tarjeta titulo="Conversaciones por período">
             <Grafico opcion={optSerie} />
           </Tarjeta>

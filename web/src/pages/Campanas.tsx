@@ -1,9 +1,10 @@
 import { useCallback, useMemo, useState } from 'react';
 import { conRango, getJson, useApi, type Rango } from '../api';
 import Grafico from '../components/Grafico';
-import { barrasApiladas, pivotar } from '../components/series';
+import { barrasApiladas, lineas, pivotar } from '../components/series';
+import { AvisoIncidentes, useSombras } from '../incidentes';
 import { descargarCsv, Estado, Tabla, Tarjeta, type Columna } from '../components/ui';
-import { etiqueta, fecha, fechaHora, hora, num, pct } from '../format';
+import { etiqueta, fecha, fechaHora, hora, num, pct, ratio, tasaTxt } from '../format';
 
 interface FilaCampana {
   campana: string;
@@ -25,6 +26,44 @@ interface Datos {
   serie: { periodo: string; campana: string | null; enviados: number }[];
   entregaDesde: string | null;
 }
+interface Tiempos {
+  respuesta: { campana: string; hora: number; enviados: number; acumulado: number }[];
+  lectura: { leidos: number; entregados: number; mediana_lectura_min: number | null; mediana_respuesta_min: number | null };
+}
+interface Calidad {
+  errores: { codigo: string; error: string; n: number; desde: string; hasta: string }[];
+  telefonos: { pacientes: number; sin_telefono_valido: number; no_movil: number };
+  compartidos: { numeros: number; pacientes: number };
+}
+interface TelefonoInvalido {
+  nombre_completo: string;
+  tipo_documento: string | null;
+  numero_documento: string;
+  numero_contacto: string | null;
+  email: string | null;
+  registrado: string | null;
+  problema: string;
+}
+
+const COLS_ERROR: Columna<Calidad['errores'][number]>[] = [
+  { clave: 'error', titulo: 'Error de WhatsApp', envolver: true },
+  { clave: 'codigo', titulo: 'Código' },
+  { clave: 'n', titulo: 'Envíos', num: true },
+  { clave: 'desde', titulo: 'Desde', formato: fecha },
+  { clave: 'hasta', titulo: 'Hasta', formato: fecha },
+];
+const COLS_TEL: Columna<TelefonoInvalido>[] = [
+  { clave: 'nombre_completo', titulo: 'Paciente' },
+  { clave: 'tipo_documento', titulo: 'Tipo doc.' },
+  { clave: 'numero_documento', titulo: 'Documento' },
+  { clave: 'numero_contacto', titulo: 'Teléfono registrado' },
+  { clave: 'email', titulo: 'Correo' },
+  { clave: 'problema', titulo: 'Problema' },
+];
+
+const minutosTxt = (m: number | null) =>
+  m === null || m === undefined ? '—' : m < 60 ? `${Math.round(m)} min` : `${(m / 60).toFixed(1).replace('.', ',')} h`;
+
 interface Envio {
   enviado: string;
   campana: string;
@@ -61,7 +100,13 @@ const COLS_CAMPANA: Columna<FilaCampana>[] = [
     csv: (_v, f) => String(f.respondieron + f.respondieron_tarde),
     orden: (f) => f.respondieron + f.respondieron_tarde,
   },
-  { clave: 'citas_confirmadas', titulo: 'Confirmaron la cita', num: true },
+  {
+    clave: 'citas_confirmadas',
+    titulo: 'Confirmaron la cita',
+    num: true,
+    formato: (v, f) => (v ? `${num(v)} (${pct(v, f.enviados, 0)})` : '—'),
+    csv: (v) => String(v ?? 0),
+  },
   { clave: 'citas_canceladas', titulo: 'Cancelaron la cita', num: true },
 ];
 
@@ -83,6 +128,10 @@ const TAM = 50;
 
 export default function Campanas({ rango }: { rango: Rango }) {
   const { data, error, cargando } = useApi<Datos>(conRango('/api/campanas', rango), 60_000);
+  const tiempos = useApi<Tiempos>(conRango('/api/campanas/tiempos', rango), 120_000);
+  const calidad = useApi<Calidad>(conRango('/api/campanas/calidad', rango), 300_000);
+  const sombras = useSombras(['whatsapp', 'trazabilidad']);
+  const [exportandoTel, setExportandoTel] = useState(false);
   const [campana, setCampana] = useState('');
   const [respuesta, setRespuesta] = useState('');
   const [pagina, setPagina] = useState(1);
@@ -102,10 +151,40 @@ export default function Campanas({ rango }: { rango: Rango }) {
     const filas = data!.serie.map((s) => ({ ...s, campana: s.campana && !PRINCIPALES.includes(s.campana) ? 'Otras' : s.campana }));
     const { periodos, series } = pivotar(filas, 'campana', 'enviados', grupos);
     // El color se asigna por el código de campaña; después se traduce el nombre visible.
-    const opt = barrasApiladas(periodos, series, data!.rango.grano) as any;
+    const opt = barrasApiladas(periodos, series, data!.rango.grano, sombras) as any;
     opt.series.forEach((s: any) => (s.name = s.name === 'Otras' ? 'Otras' : etiqueta(s.name)));
     return opt;
-  }, [data, grupos]);
+  }, [data, grupos, sombras]);
+
+  // CAM-06: % acumulado de respuesta según las horas desde el envío, una curva por campaña.
+  const optTiempos = useCallback(() => {
+    const filas = tiempos.data!.respuesta;
+    const horas = [...new Set(filas.map((f) => f.hora))].sort((a, b) => a - b);
+    const series: Record<string, (number | null)[]> = {};
+    for (const c of ['execute', 'reminder', 'recuperacion', 'conasistencia']) {
+      const fc = filas.filter((f) => f.campana === c);
+      if (!fc.length) continue;
+      series[c] = horas.map((h) => {
+        const f = fc.find((x) => x.hora === h);
+        return f && f.enviados ? f.acumulado / f.enviados : null;
+      });
+    }
+    const opt = lineas(horas.map(String), series, 'day', undefined, true) as any;
+    opt.xAxis.data = horas.map((h) => (h < 24 ? `${h} h` : `${h / 24} d`));
+    opt.series.forEach((s: any) => (s.name = etiqueta(s.name)));
+    return opt;
+  }, [tiempos.data]);
+
+  const exportarTelefonos = async () => {
+    setExportandoTel(true);
+    try {
+      const d = await getJson<{ filas: TelefonoInvalido[] }>('/api/campanas/telefonos-invalidos');
+      descargarCsv('pacientes_telefono_a_corregir', d.filas, COLS_TEL);
+    } finally {
+      setExportandoTel(false);
+    }
+  };
+
 
   const exportar = async () => {
     setExportando(true);
@@ -122,6 +201,7 @@ export default function Campanas({ rango }: { rango: Rango }) {
 
   return (
     <>
+      <AvisoIncidentes rango={rango} areas={['whatsapp', 'trazabilidad']} compara={false} />
       <Estado cargando={cargando} error={error} hayDatos={!!data} />
       {data && (
         <>
@@ -138,6 +218,71 @@ export default function Campanas({ rango }: { rango: Rango }) {
           </Tarjeta>
         </>
       )}
+
+      {tiempos.data && (
+        <div className="grid g2">
+          <Tarjeta
+            titulo="¿Cuánto tardan en responder?"
+            ayuda="Porcentaje de pacientes que ya respondió según el tiempo transcurrido desde el envío. Sirve para decidir cuánto esperar antes de insistir."
+          >
+            {tiempos.data.respuesta.length ? (
+              <Grafico opcion={optTiempos} alto={260} />
+            ) : (
+              <p className="ayuda">Sin envíos que pidan respuesta en este período.</p>
+            )}
+          </Tarjeta>
+          <Tarjeta titulo="Lectura y respuesta" ayuda="La lectura solo se conoce para envíos desde el 30 sep 2026.">
+            <div className="cifras">
+              <div className="cifra">
+                <div className="n">{minutosTxt(tiempos.data.lectura.mediana_respuesta_min)}</div>
+                <div className="t">tiempo típico hasta responder</div>
+              </div>
+              <div className="cifra">
+                <div className="n">{minutosTxt(tiempos.data.lectura.mediana_lectura_min)}</div>
+                <div className="t">tiempo típico hasta leer</div>
+              </div>
+              <div className="cifra">
+                <div className="n">{tasaTxt(ratio(tiempos.data.lectura.leidos, tiempos.data.lectura.entregados), 0)}</div>
+                <div className="t">de los mensajes entregados fueron leídos</div>
+              </div>
+            </div>
+          </Tarjeta>
+        </div>
+      )}
+
+      {calidad.data && (
+        <div className="grid g2">
+          <Tarjeta titulo="Errores de envío" ayuda="Mensajes que WhatsApp no entregó en el período, por motivo.">
+            <Tabla filas={calidad.data.errores} columnas={COLS_ERROR} vacio="Sin errores de envío en este período" />
+          </Tarjeta>
+          <Tarjeta
+            titulo="Calidad de los teléfonos"
+            ayuda="Estado actual. Un paciente sin teléfono válido no recibe recordatorios."
+            accion={
+              <button className="boton" disabled={exportandoTel} onClick={exportarTelefonos}>
+                {exportandoTel ? 'Preparando…' : 'Descargar para corregir'}
+              </button>
+            }
+          >
+            <div className="cifras">
+              <div className="cifra">
+                <div className="n">{num(calidad.data.telefonos.sin_telefono_valido)}</div>
+                <div className="t">pacientes sin teléfono válido</div>
+              </div>
+              <div className="cifra">
+                <div className="n">{num(calidad.data.telefonos.no_movil)}</div>
+                <div className="t">con un número que no es celular colombiano</div>
+              </div>
+              <div className="cifra">
+                <div className="n">{num(calidad.data.compartidos.numeros)}</div>
+                <div className="t">números compartidos por {num(calidad.data.compartidos.pacientes)} pacientes (familias)</div>
+              </div>
+            </div>
+            <p className="nota">De {num(calidad.data.telefonos.pacientes)} pacientes registrados.</p>
+          </Tarjeta>
+        </div>
+      )}
+
 
       <Tarjeta
         titulo="Detalle de mensajes"

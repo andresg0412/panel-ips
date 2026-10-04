@@ -52,7 +52,7 @@ const COLS_CAMP: Columna<Datos['campanas'][number]>[] = [
   { clave: 'fallidos_hoy', titulo: 'Fallidos hoy', num: true },
 ];
 const COLS_ERR: Columna<Datos['erroresEnvio'][number]>[] = [
-  { clave: 'error', titulo: 'Error de WhatsApp' },
+  { clave: 'error', titulo: 'Error de WhatsApp', envolver: true },
   { clave: 'error_code', titulo: 'Código' },
   { clave: 'n', titulo: 'Veces', num: true },
   { clave: 'ultima_vez', titulo: 'Última vez', formato: fecha },

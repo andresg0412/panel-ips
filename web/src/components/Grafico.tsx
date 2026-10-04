@@ -1,11 +1,31 @@
 import { useEffect, useRef, useState } from 'react';
 import * as echarts from 'echarts/core';
 import { BarChart, LineChart, HeatmapChart } from 'echarts/charts';
-import { GridComponent, TooltipComponent, LegendComponent, VisualMapComponent } from 'echarts/components';
+import {
+  GridComponent,
+  TooltipComponent,
+  LegendComponent,
+  VisualMapComponent,
+  MarkAreaComponent,
+  MarkLineComponent,
+  TitleComponent,
+} from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import type { EChartsCoreOption } from 'echarts/core';
 
-echarts.use([BarChart, LineChart, HeatmapChart, GridComponent, TooltipComponent, LegendComponent, VisualMapComponent, CanvasRenderer]);
+echarts.use([
+  BarChart,
+  LineChart,
+  HeatmapChart,
+  GridComponent,
+  TooltipComponent,
+  LegendComponent,
+  VisualMapComponent,
+  MarkAreaComponent,
+  MarkLineComponent,
+  TitleComponent,
+  CanvasRenderer,
+]);
 
 /** Lee un token de color de :root (cambia con el modo claro/oscuro). */
 export function token(nombre: string): string {
@@ -42,7 +62,7 @@ export function base(): EChartsCoreOption {
   return {
     textStyle: { fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif', color: ink2 },
     grid: { left: 8, right: 16, top: 36, bottom: 8, containLabel: true },
-    legend: { top: 0, left: 0, icon: 'roundRect', itemWidth: 12, itemHeight: 12, textStyle: { color: ink2 } },
+    legend: { type: 'scroll', top: 0, left: 0, right: 0, icon: 'roundRect', itemWidth: 12, itemHeight: 12, textStyle: { color: ink2 } },
     tooltip: {
       backgroundColor: token('surface'),
       borderColor: token('border'),

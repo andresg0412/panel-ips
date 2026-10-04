@@ -1,6 +1,9 @@
+import { useCallback } from 'react';
 import { conRango, useApi, type Rango } from '../api';
+import Grafico from '../components/Grafico';
+import { embudo } from '../components/series';
 import { Estado, Kpi, ListaConteo, Tabla, Tarjeta, type Columna } from '../components/ui';
-import { etiqueta, fecha, fechaHora, hora } from '../format';
+import { etiqueta, fecha, fechaHora, hora, num } from '../format';
 
 type Conteo = { clave: string; n: number };
 interface Cupo {
@@ -42,6 +45,17 @@ interface Datos {
   cuposRecientes: Cupo[];
   ofertasRecientes: Oferta[];
   ejecuciones: Ejecucion[];
+  embudo: {
+    cupos: number;
+    con_oferta: number;
+    aceptados: number;
+    asignados: number;
+    horas_recuperadas: number;
+    minutos_hasta_asignar: number | null;
+    recolocadas_atendidas: number;
+  };
+  motivos: Conteo[];
+  invitacionesPorTipo: { campana_tipo: string; clave: string; n: number }[];
 }
 
 const lista = (c: Conteo[]) => c.map((x) => ({ clave: x.clave, etiqueta: etiqueta(x.clave), n: x.n }));
@@ -79,6 +93,17 @@ const COLS_EJEC: Columna<Ejecucion>[] = [
 export default function ListaEspera({ rango }: { rango: Rango }) {
   const { data, error, cargando } = useApi<Datos>(conRango('/api/lista-espera', rango), 60_000);
 
+  const optEmbudo = useCallback(() => {
+    const e = data!.embudo;
+    return embudo([
+      { nombre: 'Cupos liberados por cancelación', valor: e.cupos },
+      { nombre: 'Se ofrecieron a la lista', valor: e.con_oferta },
+      { nombre: 'Un paciente aceptó', valor: e.aceptados },
+      { nombre: 'Cupo asignado', valor: e.asignados },
+      { nombre: 'El paciente asistió', valor: e.recolocadas_atendidas },
+    ]);
+  }, [data]);
+
   return (
     <>
       <div className="aviso">
@@ -94,6 +119,27 @@ export default function ListaEspera({ rango }: { rango: Rango }) {
             <Kpi etiqueta="Ofertas enviadas" actual={suma(data.ofertas)} />
             <Kpi etiqueta="Ofertas aceptadas" actual={de(data.ofertas, 'aceptada')} />
             <Kpi etiqueta="Invitaciones a inscribirse" actual={suma(data.invitaciones)} />
+          </div>
+          <div className="grid g2">
+            <Tarjeta
+              titulo="De cupo liberado a cita atendida"
+              ayuda={data.embudo.cupos < 20 ? 'Fase inicial: con tan pocos cupos los porcentajes todavía no son representativos.' : 'Porcentaje de cada etapa sobre la anterior.'}
+            >
+              {data.embudo.cupos ? <Grafico opcion={optEmbudo} alto={230} /> : <p className="ayuda">Sin cupos liberados en este período.</p>}
+            </Tarjeta>
+            <Tarjeta titulo="Lo que recuperó la lista" ayuda="Horas de consulta que, sin la lista, habrían quedado vacías.">
+              <div className="cifras">
+                <div className="cifra"><div className="n">{num(data.embudo.horas_recuperadas)} h</div><div className="t">de consulta recuperadas</div></div>
+                <div className="cifra"><div className="n">{data.embudo.cupos ? `${Math.round((data.embudo.asignados / data.embudo.cupos) * 100)} %` : '—'}</div><div className="t">de los cupos liberados se recolocaron</div></div>
+                <div className="cifra"><div className="n">{data.embudo.minutos_hasta_asignar === null ? '—' : data.embudo.minutos_hasta_asignar < 60 ? `${data.embudo.minutos_hasta_asignar} min` : `${Math.round(data.embudo.minutos_hasta_asignar / 60)} h`}</div><div className="t">tiempo típico hasta recolocar</div></div>
+              </div>
+              {data.motivos.length > 0 && (
+                <>
+                  <p className="ayuda" style={{ marginTop: 12 }}>Cupos que no se recolocaron, por motivo:</p>
+                  <ListaConteo items={lista(data.motivos)} total={suma(data.motivos)} />
+                </>
+              )}
+            </Tarjeta>
           </div>
           <div className="grid g3">
             <Tarjeta titulo="Inscripciones del período" ayuda="Estado actual de cada inscripción.">
@@ -112,7 +158,17 @@ export default function ListaEspera({ rango }: { rango: Rango }) {
           <Tarjeta titulo="Ofertas recientes">
             <Tabla filas={data.ofertasRecientes} columnas={COLS_OFERTA} nombreCsv="ofertas_cupo" />
           </Tarjeta>
-          <Tarjeta titulo="Campañas de invitación" ayuda="Envíos que invitan a pacientes con citas lejanas a inscribirse en la lista de espera.">
+          <Tarjeta titulo="Invitaciones a la lista de espera" ayuda="Respuesta de los pacientes invitados a inscribirse, por tipo de campaña.">
+            {data.invitacionesPorTipo.length ? (
+              <ListaConteo
+                items={data.invitacionesPorTipo.map((i) => ({ clave: `${i.campana_tipo}-${i.clave}`, etiqueta: `${etiqueta(i.campana_tipo)}: ${etiqueta(i.clave)}`, n: i.n }))}
+                total={data.invitacionesPorTipo.reduce((s, i) => s + i.n, 0)}
+              />
+            ) : (
+              <p className="ayuda">Sin datos aún: aparecerán cuando se active la campaña de invitación a la lista de espera.</p>
+            )}
+          </Tarjeta>
+          <Tarjeta titulo="Ejecuciones de la campaña de invitación" ayuda="Envíos que invitan a pacientes con citas lejanas a inscribirse en la lista de espera.">
             <Tabla filas={data.ejecuciones} columnas={COLS_EJEC} nombreCsv="invitaciones" vacio="Aún no se han ejecutado campañas de invitación en este período" />
           </Tarjeta>
         </>

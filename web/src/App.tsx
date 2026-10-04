@@ -8,15 +8,18 @@ import Chatbot from './pages/Chatbot';
 import ListaEspera from './pages/ListaEspera';
 import Pacientes from './pages/Pacientes';
 import Sistema from './pages/Sistema';
+import Profesionales from './pages/Profesionales';
+import { IncidentesCtx, type Incidente } from './incidentes';
 import { fecha } from './format';
 
 const PAGINAS = [
   { ruta: 'resumen', titulo: 'Resumen', desc: 'Lo más importante del período', Comp: Resumen, conRango: true },
   { ruta: 'campanas', titulo: 'Campañas', desc: 'Mensajes automáticos de WhatsApp y sus resultados', Comp: Campanas, conRango: true },
   { ruta: 'agenda', titulo: 'Agenda', desc: 'Citas por estado, profesional y especialidad', Comp: Agenda, conRango: true },
+  { ruta: 'profesionales', titulo: 'Profesionales', desc: 'Agenda, asistencia y continuidad de cada profesional', Comp: Profesionales, conRango: true },
   { ruta: 'chatbot', titulo: 'Chatbot', desc: 'Conversaciones con el asistente de WhatsApp', Comp: Chatbot, conRango: true },
   { ruta: 'lista-espera', titulo: 'Lista de espera', desc: 'Inscripciones, cupos liberados y ofertas', Comp: ListaEspera, conRango: true },
-  { ruta: 'pacientes', titulo: 'Pacientes', desc: 'Historial completo de un paciente', Comp: Pacientes, conRango: false },
+  { ruta: 'pacientes', titulo: 'Pacientes', desc: 'Quiénes son, cuántos llegan y cada cuánto vuelven', Comp: Pacientes, conRango: true },
   { ruta: 'sistema', titulo: 'Estado del sistema', desc: '¿Está funcionando todo?', Comp: Sistema, conRango: false },
 ] as const;
 
@@ -59,7 +62,10 @@ function leerUrl(): Estado {
 }
 
 function escribirUrl(e: Estado) {
-  const q = e.preset === 'custom' ? `desde=${e.rango.desde}&hasta=${e.rango.hasta}` : `p=${e.preset}`;
+  const pestana = new URLSearchParams(location.hash.split('?')[1] ?? '').get('t');
+  const [rutaActual] = location.hash.replace(/^#\/?/, '').split('?');
+  const t = pestana && rutaActual === e.ruta ? `&t=${pestana}` : '';
+  const q = (e.preset === 'custom' ? `desde=${e.rango.desde}&hasta=${e.rango.hasta}` : `p=${e.preset}`) + t;
   const hash = `#/${e.ruta}?${q}`;
   if (location.hash !== hash) history.replaceState(null, '', hash);
 }
@@ -79,6 +85,7 @@ export default function App() {
   const [refresco, setRefresco] = useState(0);
   const [horaDatos, setHoraDatos] = useState(horaActual);
   const yo = useApi<{ usuario: string | null }>('/api/yo');
+  const incidentes = useApi<{ incidentes: Incidente[] }>('/api/incidentes');
 
   useEffect(() => {
     const fn = () => setEstado(leerUrl());
@@ -127,6 +134,7 @@ export default function App() {
 
   return (
     <RefrescoCtx.Provider value={refresco}>
+      <IncidentesCtx.Provider value={incidentes.data?.incidentes ?? []}>
       <div className="app">
         <nav className="nav">
           <h1>Centro de Orientación</h1>
@@ -165,6 +173,7 @@ export default function App() {
           <Comp rango={estado.rango} />
         </main>
       </div>
+      </IncidentesCtx.Provider>
     </RefrescoCtx.Provider>
   );
 }

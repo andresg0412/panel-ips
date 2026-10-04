@@ -28,6 +28,16 @@ export function fechaCorta(v: unknown): string {
   return m ? `${d} ${MESES[m - 1]}` : String(v);
 }
 
+/** 'YYYY-MM' → 'ago 25' (ejes mensuales) */
+export function mesCorto(v: unknown): string {
+  const [a, m] = String(v).split('-').map(Number);
+  return m ? `${MESES[m - 1]} ${String(a).slice(2)}` : String(v);
+}
+
+/** Proporción → '12,3 %' */
+export const tasaTxt = (v: number | null | undefined, decimales = 1) =>
+  v === null || v === undefined || Number.isNaN(v) ? '—' : `${(v * 100).toFixed(decimales).replace('.', ',')} %`;
+
 /** Timestamp ya en hora de Bogotá 'YYYY-MM-DDTHH:MM:SS' → '4 oct 2026, 14:32' */
 export function fechaHora(v: unknown): string {
   if (!v) return '—';
@@ -92,6 +102,36 @@ const ETIQUETAS: Record<string, string> = {
   lista_espera: 'Lista de espera',
   menu: 'Menú',
   sin_dato: 'Sin dato',
+  // tipos de servicio
+  primera_vez: 'Primera vez',
+  control: 'Control / seguimiento',
+  psicoterapia: 'Psicoterapia',
+  evaluacion: 'Evaluación y pruebas',
+  crisis: 'Intervención en crisis',
+  rehabilitacion: 'Rehabilitación',
+  empresarial: 'Talleres y programas',
+  otro: 'Otro',
+  administrativa: 'Reuniones internas',
+  // modalidad, pago, edad, anticipación
+  presencial: 'Presencial',
+  virtual: 'Virtual',
+  particular: 'Particular',
+  convenio: 'Convenio / EPS',
+  '0-11': '0 a 11 años',
+  '12-17': '12 a 17 años',
+  '18-29': '18 a 29 años',
+  '30-44': '30 a 44 años',
+  '45-59': '45 a 59 años',
+  '60+': '60 años o más',
+  a_mismo_dia: 'Agendada el mismo día',
+  b_1_3: '1 a 3 días antes',
+  c_4_7: '4 a 7 días antes',
+  d_8_15: '8 a 15 días antes',
+  e_16_mas: '16 días o más antes',
+  z_sin_dato: 'Sin dato',
+  // motivos de cierre de cupos
+  fila_agotada: 'Nadie en la fila aceptó',
+  sin_candidatos: 'No había inscritos para ese cupo',
   // lista de espera
   activa: 'Activa',
   pausada: 'Pausada',

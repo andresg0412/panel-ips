@@ -1,6 +1,6 @@
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 const DIA_MS = 86_400_000;
-const MAX_DIAS = 400;
+const MAX_DIAS = 800;
 
 export class ErrorParametro extends Error {}
 

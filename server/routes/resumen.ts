@@ -2,28 +2,31 @@ import type { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { conCache } from '../cache.js';
 import { leerRango } from '../params.js';
-import { GRUPO_ESTADO, PERIODOS, periodo } from '../sql.js';
+import { CITAS, MESES, PERIODOS, periodo } from '../sql.js';
+
+// Conversación fuera del horario de recepción: antes de las 7, desde las 19 o en domingo.
+export const FUERA_HORARIO = `(extract(hour FROM inicio_at_bogota) < 7 OR extract(hour FROM inicio_at_bogota) >= 19
+                        OR extract(isodow FROM inicio_at_bogota) = 7)`;
 
 async function indicadores(desde: string, hasta: string) {
   const p = [desde, hasta];
-  const [citas, nuevas, envios, sesiones, listaEspera] = await Promise.all([
+  const [citas, envios, sesiones, listaEspera] = await Promise.all([
+    // Solo citas de pacientes (TR-02): sin reuniones internas ni bloques administrativos.
     queryOne(
-      `SELECT count(*) AS total,
-              count(*) FILTER (WHERE estado_agenda = 'Asistio') AS asistio,
-              count(*) FILTER (WHERE estado_agenda = 'No Asistio') AS no_asistio,
-              count(*) FILTER (WHERE estado_agenda IN ('Cancelado', 'Anulado')) AS canceladas,
-              count(*) FILTER (WHERE estado_agenda = 'Reprogramar') AS reprogramadas,
-              count(*) FILTER (WHERE estado_agenda IN ('Pendiente', 'Confirmado')) AS programadas
-         FROM bi.fact_citas
-        WHERE fecha_cita BETWEEN $1 AND $2`,
+      `WITH ${CITAS}
+       SELECT count(*) FILTER (WHERE fecha_cita BETWEEN $1 AND $2) AS total,
+              count(*) FILTER (WHERE fecha_cita BETWEEN $1 AND $2 AND grupo = 'Asistió') AS asistio,
+              count(*) FILTER (WHERE fecha_cita BETWEEN $1 AND $2 AND grupo = 'No asistió') AS no_asistio,
+              count(*) FILTER (WHERE fecha_cita BETWEEN $1 AND $2 AND grupo = 'Cancelada') AS canceladas,
+              count(*) FILTER (WHERE fecha_cita BETWEEN $1 AND $2 AND grupo = 'Reprogramada') AS reprogramadas,
+              count(*) FILTER (WHERE fecha_cita BETWEEN $1 AND $2 AND grupo = 'Programada') AS programadas,
+              count(*) FILTER (WHERE fecha_cita BETWEEN $1 AND $2 AND grupo = 'Sin cierre') AS sin_cierre,
+              count(*) FILTER (WHERE created_at_bogota >= $1::date AND created_at_bogota < $2::date + 1) AS registradas
+         FROM citas
+        WHERE es_cita_paciente`,
       p,
     ),
-    queryOne(
-      `SELECT count(*) AS registradas
-         FROM bi.fact_citas
-        WHERE created_at_bogota >= $1::date AND created_at_bogota < $2::date + 1`,
-      p,
-    ),
+    // Confirmó (CAM-01): respondió "confirmo" al mensaje o la cita pasó a Confirmado después del envío.
     queryOne(
       `SELECT count(*) FILTER (WHERE estado NOT IN ('rechazado_api', 'failed')) AS enviados,
               count(*) FILTER (WHERE estado IN ('rechazado_api', 'failed')) AS fallidos,
@@ -32,7 +35,7 @@ async function indicadores(desde: string, hasta: string) {
               count(*) FILTER (WHERE estado_respuesta IN ('respondio', 'respondio_tarde')) AS respondieron,
               -- Base de la tasa de respuesta: sin el recordatorio de 2 h ni los avisos a asesores, que no piden respuesta.
               count(*) FILTER (WHERE estado NOT IN ('rechazado_api', 'failed') AND campana NOT IN ('daily', 'aviso_asesor')) AS enviados_con_respuesta,
-              count(*) FILTER (WHERE cita_confirmada_despues) AS confirmaron
+              count(*) FILTER (WHERE respuesta_tipo = 'confirmo' OR cita_confirmada_despues) AS confirmaron
          FROM bi.fact_envios
         WHERE fecha_bogota BETWEEN $1 AND $2 AND tipo_envio = 'plantilla'`,
       p,
@@ -45,7 +48,8 @@ async function indicadores(desde: string, hasta: string) {
               count(*) FILTER (WHERE resultado_negocio = 'cita_cancelada') AS citas_canceladas,
               count(*) FILTER (WHERE resultado_negocio = 'cita_reprogramada') AS citas_reprogramadas,
               count(*) FILTER (WHERE resultado_negocio = 'cita_confirmada') AS citas_confirmadas,
-              count(*) FILTER (WHERE resultado_negocio = 'derivado_agente') AS derivadas_agente
+              count(*) FILTER (WHERE resultado_negocio IN ('derivado_agente', 'fuera_horario')) AS derivadas_agente,
+              count(*) FILTER (WHERE ${FUERA_HORARIO}) AS fuera_horario
          FROM bi.fact_sesiones
         WHERE fecha_bogota BETWEEN $1 AND $2`,
       p,
@@ -61,7 +65,7 @@ async function indicadores(desde: string, hasta: string) {
       p,
     ),
   ]);
-  return { citas: { ...citas, ...nuevas }, envios, sesiones, listaEspera };
+  return { citas, envios, sesiones, listaEspera };
 }
 
 export default async function rutasResumen(app: FastifyInstance) {
@@ -79,13 +83,13 @@ export default async function rutasResumen(app: FastifyInstance) {
     return conCache(req.url, async () => {
       const [citas, envios, sesiones] = await Promise.all([
         query(
-          `WITH p AS (${PERIODOS})
+          `WITH ${CITAS}, p AS (${PERIODOS})
            SELECT p.periodo, c.grupo, coalesce(c.n, 0) AS n
              FROM p
              LEFT JOIN (
-               SELECT ${periodo('fecha_cita')} AS periodo, ${GRUPO_ESTADO} AS grupo, count(*) AS n
-                 FROM bi.fact_citas
-                WHERE fecha_cita BETWEEN $1 AND $2
+               SELECT ${periodo('fecha_cita')} AS periodo, grupo, count(*) AS n
+                 FROM citas
+                WHERE es_cita_paciente AND fecha_cita BETWEEN $1 AND $2
                 GROUP BY 1, 2
              ) c USING (periodo)
             ORDER BY 1`,
@@ -119,4 +123,28 @@ export default async function rutasResumen(app: FastifyInstance) {
       return { rango: r, citas, envios, sesiones };
     });
   });
+
+  // RES-02: citas atendidas por mes y especialidad desde el inicio de los datos (no depende del rango).
+  app.get('/api/resumen/tendencia', async (req) =>
+    conCache(
+      req.url,
+      async () => {
+        const filas = await query(
+          `WITH ${CITAS}, m AS (${MESES})
+           SELECT m.mes, e.especialidad, coalesce(c.n, 0) AS n
+             FROM m
+            CROSS JOIN (VALUES ('Psicología'), ('Psiquiatría'), ('Neuropsicología')) AS e(especialidad)
+             LEFT JOIN (
+               SELECT to_char(fecha_cita, 'YYYY-MM') AS mes, especialidad, count(*) AS n
+                 FROM citas
+                WHERE es_cita_paciente AND grupo = 'Asistió'
+                GROUP BY 1, 2
+             ) c ON c.mes = m.mes AND c.especialidad = e.especialidad
+            ORDER BY 1`,
+        );
+        return { filas };
+      },
+      300_000,
+    ),
+  );
 }

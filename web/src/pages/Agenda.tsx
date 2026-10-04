@@ -4,6 +4,8 @@ import Grafico from '../components/Grafico';
 import { barrasApiladas, pivotar, ranking } from '../components/series';
 import { Estado, Kpi, ListaConteo, Tabla, Tarjeta, type Columna } from '../components/ui';
 import { DIAS, etiqueta, fecha, fechaHora, hora, pct } from '../format';
+import { AvisoIncidentes, Pestanas, usePestana, useSombras } from '../incidentes';
+import { AgendaCalidad, AgendaInasistencia, AgendaTendencias } from './AgendaAnalisis';
 
 interface PorEstado {
   nombre?: string;
@@ -14,6 +16,8 @@ interface PorEstado {
   canceladas: number;
   reprogramadas: number;
   programadas: number;
+  sin_cierre?: number;
+  horas_no_ocurrieron?: number;
 }
 interface Cambio {
   cuando: string;
@@ -34,10 +38,11 @@ interface Datos {
   diaSemana: PorEstado[];
   origenCancelacion: { origen: string; n: number }[];
   cambios: Cambio[];
+  servicio: PorEstado[];
 }
 
 // Mismo orden que los colores fijos (s1..s5): evita que el amarillo quede junto al naranja.
-const GRUPOS = ['Asistió', 'Cancelada', 'Reprogramada', 'No asistió', 'Programada', 'Otro'];
+const GRUPOS = ['Asistió', 'Cancelada', 'Reprogramada', 'No asistió', 'Programada', 'Sin cierre', 'Otro'];
 const tasa = (f: PorEstado) => (f.asistio + f.no_asistio ? f.asistio / (f.asistio + f.no_asistio) : null);
 
 const colsEstado = (titulo: string): Columna<PorEstado>[] => [
@@ -48,6 +53,7 @@ const colsEstado = (titulo: string): Columna<PorEstado>[] => [
   { clave: 'canceladas', titulo: 'Canceladas', num: true },
   { clave: 'reprogramadas', titulo: 'Reprogramadas', num: true },
   { clave: 'programadas', titulo: 'Programadas', num: true },
+  { clave: 'sin_cierre', titulo: 'Sin cierre', num: true },
   {
     clave: 'asistio',
     titulo: 'Asistencia',
@@ -60,6 +66,20 @@ const colsEstado = (titulo: string): Columna<PorEstado>[] => [
 const COLS_PROF = colsEstado('Profesional');
 const COLS_ESP = colsEstado('Especialidad');
 const COLS_ADM = colsEstado('Convenio / administradora');
+const COLS_SERV: Columna<PorEstado>[] = [
+  { clave: 'nombre', titulo: 'Tipo de atención', formato: etiqueta, csv: etiqueta },
+  { clave: 'total', titulo: 'Total', num: true },
+  { clave: 'asistio', titulo: 'Asistió', num: true },
+  {
+    clave: 'canceladas',
+    titulo: 'No ocurrieron',
+    num: true,
+    formato: (_v, f) => pct(f.canceladas + f.reprogramadas, f.total),
+    csv: (_v, f) => pct(f.canceladas + f.reprogramadas, f.total),
+    orden: (f) => (f.total ? (f.canceladas + f.reprogramadas) / f.total : null),
+  },
+  { clave: 'horas_no_ocurrieron', titulo: 'Horas de consulta perdidas', num: true },
+];
 
 const COLS_CAMBIO: Columna<Cambio>[] = [
   { clave: 'cuando', titulo: 'Cuándo', formato: fechaHora },
@@ -71,13 +91,39 @@ const COLS_CAMBIO: Columna<Cambio>[] = [
   { clave: 'origen', titulo: 'Origen', formato: etiqueta, csv: etiqueta },
 ];
 
+type Vista = 'periodo' | 'inasistencia' | 'tendencias' | 'calidad';
+
 export default function Agenda({ rango }: { rango: Rango }) {
+  const [vista, setVista] = usePestana<Vista>(['periodo', 'inasistencia', 'tendencias', 'calidad'], 'periodo');
+  return (
+    <>
+      <Pestanas<Vista>
+        opciones={[
+          ['periodo', 'Período'],
+          ['inasistencia', 'Inasistencia'],
+          ['tendencias', 'Tendencias'],
+          ['calidad', 'Calidad de los datos'],
+        ]}
+        valor={vista}
+        onCambio={setVista}
+      />
+      <AvisoIncidentes rango={rango} areas={['agenda']} compara={false} />
+      {vista === 'periodo' && <AgendaPeriodo rango={rango} />}
+      {vista === 'inasistencia' && <AgendaInasistencia rango={rango} />}
+      {vista === 'tendencias' && <AgendaTendencias />}
+      {vista === 'calidad' && <AgendaCalidad />}
+    </>
+  );
+}
+
+function AgendaPeriodo({ rango }: { rango: Rango }) {
+  const sombras = useSombras(['agenda']);
   const { data, error, cargando } = useApi<Datos>(conRango('/api/agenda', rango), 120_000);
 
   const optSerie = useCallback(() => {
     const { periodos, series } = pivotar(data!.serie, 'grupo', 'n', GRUPOS);
-    return barrasApiladas(periodos, series, data!.rango.grano);
-  }, [data]);
+    return barrasApiladas(periodos, series, data!.rango.grano, sombras);
+  }, [data, sombras]);
 
   const optDia = useCallback(
     () => ranking(
@@ -95,8 +141,9 @@ export default function Agenda({ rango }: { rango: Rango }) {
       canceladas: acc.canceladas + f.canceladas,
       reprogramadas: acc.reprogramadas + f.reprogramadas,
       programadas: acc.programadas + f.programadas,
+      sin_cierre: (acc.sin_cierre ?? 0) + (f.sin_cierre ?? 0),
     }),
-    { total: 0, asistio: 0, no_asistio: 0, canceladas: 0, reprogramadas: 0, programadas: 0 },
+    { total: 0, asistio: 0, no_asistio: 0, canceladas: 0, reprogramadas: 0, programadas: 0, sin_cierre: 0 } as PorEstado,
   );
   const totalCanceladas = data?.origenCancelacion.reduce((s, o) => s + o.n, 0) ?? 0;
 
@@ -112,6 +159,7 @@ export default function Agenda({ rango }: { rango: Rango }) {
             <Kpi etiqueta="Canceladas" actual={tot.canceladas} />
             <Kpi etiqueta="Reprogramadas" actual={tot.reprogramadas} />
             <Kpi etiqueta="Programadas (por venir)" actual={tot.programadas} />
+            {(tot.sin_cierre ?? 0) > 0 && <Kpi etiqueta="Sin cierre (no se sabe si ocurrió)" actual={tot.sin_cierre ?? 0} />}
           </div>
           <Tarjeta titulo="Citas por estado" ayuda="Asistencia = asistió ÷ (asistió + no asistió). Las canceladas y reprogramadas no cuentan porque la cita no ocurrió.">
             <Grafico opcion={optSerie} />
@@ -124,7 +172,10 @@ export default function Agenda({ rango }: { rango: Rango }) {
               <Grafico opcion={optDia} alto={240} />
             </Tarjeta>
           </div>
-          <Tarjeta titulo="Por profesional" ayuda="Haga clic en un encabezado para ordenar.">
+          <Tarjeta titulo="Por tipo de atención" ayuda="No ocurrieron = canceladas + reprogramadas. Horas perdidas: duración de esas citas.">
+            <Tabla filas={data.servicio} columnas={COLS_SERV} nombreCsv="agenda_tipo_atencion" />
+          </Tarjeta>
+          <Tarjeta titulo="Por profesional" ayuda="Haga clic en un encabezado para ordenar. La ficha completa está en Profesionales.">
             <Tabla filas={data.profesional} columnas={COLS_PROF} nombreCsv={`agenda_profesional_${rango.desde}_${rango.hasta}`} />
           </Tarjeta>
           <div className="grid g2">
