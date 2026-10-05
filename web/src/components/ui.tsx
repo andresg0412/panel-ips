@@ -12,11 +12,51 @@ export function Info({ texto }: { texto: string }) {
   );
 }
 
-export function Tarjeta({ titulo, ayuda, children, accion }: { titulo: string; ayuda?: ReactNode; children: ReactNode; accion?: ReactNode }) {
+/**
+ * Tipo de métrica (Etapa 3): un distintivo pequeño junto al título, con su explicación al pasar el cursor. Sin
+ * distintivo, la cifra es observada: se cuenta directamente de los registros. No es un aviso ni un banner.
+ */
+export type TipoMarca = 'observada' | 'estimada' | 'incompleta' | 'incidente';
+
+export interface MarcaDato {
+  tipo: TipoMarca;
+  /** Explicación propia de la tarjeta; si falta, la general del tipo. */
+  detalle?: string;
+}
+
+const MARCAS: Record<TipoMarca, { texto: string; explicacion: string }> = {
+  observada: { texto: 'Observada', explicacion: 'Se cuenta directamente de los registros del bot, de WhatsApp o de la agenda.' },
+  estimada: { texto: 'Estimada', explicacion: 'Se calcula con un supuesto o con un enlace inferido entre registros (por ejemplo, mensaje y cita por teléfono y fecha).' },
+  incompleta: { texto: 'Incompleta', explicacion: 'Parte del período no tiene este dato registrado: la cifra cubre solo los días con datos.' },
+  incidente: { texto: 'Afectada por incidente', explicacion: 'El período toca un incidente conocido de registro de datos: la cifra puede quedar por debajo de la real.' },
+};
+
+export function Marca({ tipo, detalle }: MarcaDato) {
+  const m = MARCAS[tipo];
+  const tip = detalle ?? m.explicacion;
+  return (
+    <span className={`marca marca-${tipo}`} tabIndex={0} role="note" aria-label={`${m.texto}: ${tip}`} data-tip={tip}>
+      {m.texto}
+    </span>
+  );
+}
+
+export function Tarjeta({ titulo, ayuda, children, accion, marcas }: {
+  titulo: string;
+  ayuda?: ReactNode;
+  children: ReactNode;
+  accion?: ReactNode;
+  /** Tipo de métrica (estimada, incompleta, afectada por incidente). Las vacías se ignoran. */
+  marcas?: (MarcaDato | null | undefined | false)[];
+}) {
+  const ms = (marcas ?? []).filter((m): m is MarcaDato => !!m);
   return (
     <section className="card">
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
-        <h3>{titulo}</h3>
+        <h3>
+          {titulo}
+          {ms.map((m) => <Marca key={m.tipo} {...m} />)}
+        </h3>
         {accion}
       </div>
       {ayuda ? <p className="ayuda">{ayuda}</p> : <div style={{ height: 10 }} />}

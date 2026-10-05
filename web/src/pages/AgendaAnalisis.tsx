@@ -103,7 +103,7 @@ export function AgendaInasistencia({ rango }: { rango: Rango }) {
             <Grafico opcion={optMapa} alto={300} />
           </Tarjeta>
           <div className="grid g3">
-            <Tarjeta titulo="Por anticipación con que se agendó" ayuda="Aproximado: días entre el registro de la cita y la cita.">
+            <Tarjeta titulo="Por anticipación con que se agendó" marcas={[{ tipo: 'estimada', detalle: 'Aproximado: el sistema registra la cita cuando la ve en Globho, hasta 30 días antes. Esperas mayores quedan cortadas en 30 días.' }]} ayuda="Aproximado: días entre el registro de la cita y la cita.">
               <Grafico opcion={optAnticipacion} alto={230} />
             </Tarjeta>
             <Tarjeta titulo="Por edad del paciente">
@@ -269,10 +269,10 @@ export function AgendaTendencias() {
             </Tarjeta>
           </div>
           <div className="grid g2">
-            <Tarjeta titulo="¿Cuánto espera un paciente nuevo?" ayuda="Mediana de días entre el registro de la primera cita y la cita. Aproximado: el sistema ve la cita hasta 30 días antes.">
+            <Tarjeta titulo="¿Cuánto espera un paciente nuevo?" marcas={[{ tipo: 'estimada', detalle: 'Aproximado: el sistema registra la cita cuando la ve en Globho, hasta 30 días antes. Esperas mayores quedan cortadas en 30 días.' }]} ayuda="Mediana de días entre el registro de la primera cita y la cita. Aproximado: el sistema ve la cita hasta 30 días antes.">
               <Grafico opcion={optEspera} alto={300} />
             </Tarjeta>
-            <Tarjeta titulo="Días de espera recientes" ayuda="Últimos dos meses. P90: 9 de cada 10 pacientes esperan menos que esto.">
+            <Tarjeta titulo="Días de espera recientes" marcas={[{ tipo: 'estimada', detalle: 'Aproximado: el sistema registra la cita cuando la ve en Globho, hasta 30 días antes. Esperas mayores quedan cortadas en 30 días.' }]} ayuda="Últimos dos meses. P90: 9 de cada 10 pacientes esperan menos que esto.">
               <Tabla
                 filas={ultimaEspera}
                 columnas={[

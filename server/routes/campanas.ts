@@ -59,7 +59,7 @@ export default async function rutasCampanas(app: FastifyInstance) {
   app.get('/api/campanas/tiempos', async (req) => {
     const r = leerRango(req.query as Record<string, unknown>);
     return conCache(claveCache(req), async () => {
-      const [respuesta, lectura] = await Promise.all([
+      const [respuesta, lectura, porCampana] = await Promise.all([
         query(
           `WITH base AS (
              SELECT campana, minutos_a_respuesta AS m
@@ -84,8 +84,20 @@ export default async function rutasCampanas(app: FastifyInstance) {
             WHERE fecha_bogota BETWEEN $1 AND $2 AND tipo_envio = 'plantilla' AND ${OK}`,
           [r.desde, r.hasta],
         ),
+        // Tiempo típico hasta leer y hasta responder, por campaña (Etapa 3).
+        query(
+          `SELECT campana,
+                  count(*) FILTER (WHERE read_at IS NOT NULL) AS leidos,
+                  count(*) FILTER (WHERE minutos_a_respuesta IS NOT NULL) AS respondidos,
+                  round((percentile_cont(0.5) WITHIN GROUP (ORDER BY minutos_a_lectura))::numeric, 0) AS mediana_lectura_min,
+                  round((percentile_cont(0.5) WITHIN GROUP (ORDER BY minutos_a_respuesta))::numeric, 0) AS mediana_respuesta_min
+             FROM bi.fact_envios
+            WHERE fecha_bogota BETWEEN $1 AND $2 AND tipo_envio = 'plantilla' AND ${OK}
+            GROUP BY 1 ORDER BY count(*) DESC`,
+          [r.desde, r.hasta],
+        ),
       ]);
-      return { respuesta, lectura };
+      return { respuesta, lectura, porCampana };
     });
   });
 

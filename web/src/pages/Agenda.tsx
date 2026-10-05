@@ -4,7 +4,7 @@ import Grafico from '../components/Grafico';
 import { barrasApiladas, pivotar, ranking } from '../components/series';
 import { Estado, Kpi, ListaConteo, Tabla, Tarjeta, type Columna } from '../components/ui';
 import { DIAS, etiqueta, fecha, fechaHora, hora, pct } from '../format';
-import { Pestanas, usePestana, useSombras } from '../incidentes';
+import { Pestanas, useMarcas, usePestana, useSombras } from '../incidentes';
 import { Bloqueado, Restringido, useAcceso } from '../acceso';
 import { AgendaProximas, AnticipacionCancelaciones } from './Ocupacion';
 import { AgendaCalidad, AgendaInasistencia, AgendaTendencias } from './AgendaAnalisis';
@@ -132,6 +132,7 @@ export default function Agenda({ rango }: { rango: Rango }) {
 
 function AgendaPeriodo({ rango }: { rango: Rango }) {
   const sombras = useSombras(['agenda']);
+  const marcas = useMarcas(rango, ['agenda']);
   const { data, error, cargando } = useApi<Datos>(conRango('/api/agenda', rango), 120_000);
 
   const optSerie = useCallback(() => {
@@ -175,7 +176,7 @@ function AgendaPeriodo({ rango }: { rango: Rango }) {
             <Kpi etiqueta="Programadas (por venir)" actual={tot.programadas} />
             {(tot.sin_cierre ?? 0) > 0 && <Kpi etiqueta="Sin cierre (no se sabe si ocurrió)" actual={tot.sin_cierre ?? 0} />}
           </div>
-          <Tarjeta titulo="Citas por estado" ayuda="Asistencia = asistió ÷ (asistió + no asistió). Las canceladas y reprogramadas no cuentan porque la cita no ocurrió.">
+          <Tarjeta titulo="Citas por estado" marcas={marcas} ayuda="Asistencia = asistió ÷ (asistió + no asistió). Las canceladas y reprogramadas no cuentan porque la cita no ocurrió.">
             <Grafico opcion={optSerie} />
           </Tarjeta>
           <div className="grid g2">

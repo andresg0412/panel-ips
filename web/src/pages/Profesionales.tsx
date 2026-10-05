@@ -3,7 +3,7 @@ import { conRango, useApi, type Rango } from '../api';
 import Grafico from '../components/Grafico';
 import { barrasApiladas, barrasTasa, ranking } from '../components/series';
 import { Estado, Kpi, Tabla, Tarjeta, type Columna } from '../components/ui';
-import { useSombras } from '../incidentes';
+import { useMarcas, useSombras } from '../incidentes';
 import OcupacionProfesionales from './Ocupacion';
 import { Bloqueado, Restringido, useAcceso } from '../acceso';
 import { DIAS, etiqueta, num, pct, ratio } from '../format';
@@ -76,6 +76,7 @@ export default function Profesionales({ rango }: { rango: Rango }) {
   const columnas = puede('profesionales.capacidad') ? COLUMNAS : COLUMNAS.filter((c) => c.clave !== 'volvieron');
   const ficha = useApi<Ficha>(elegido && verFicha ? conRango('/api/profesionales/ficha', rango, { nombre: elegido }) : null, 120_000);
   const sombras = useSombras(['agenda']);
+  const marcas = useMarcas(rango, ['agenda']);
 
   const optMensual = useCallback(() => {
     const m = ficha.data!.mensual;
@@ -103,6 +104,7 @@ export default function Profesionales({ rango }: { rango: Rango }) {
       </Restringido>
       <Tarjeta
         titulo="Profesionales"
+        marcas={marcas}
         ayuda={
           <>
             Haga clic en un profesional para ver su ficha. Estas cifras dependen del tipo de pacientes y de convenios de cada uno:

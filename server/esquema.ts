@@ -118,6 +118,18 @@ const MIGRACIONES: { nombre: string; sql: string }[] = [
       );
     `,
   },
+  {
+    // Etapa 3: parámetros editables (minutos por trámite para las horas de recepción ahorradas).
+    nombre: '003_parametros',
+    sql: `
+      CREATE TABLE panel.parametros (
+        clave text PRIMARY KEY,
+        valor numeric NOT NULL CHECK (valor >= 0),
+        actualizado_por text,
+        actualizado_at timestamptz NOT NULL DEFAULT now()
+      );
+    `,
+  },
 ];
 
 /** Configuración inicial (solo si no existe): nivel Full y los usuarios que ya tiene nginx, con su rol. */

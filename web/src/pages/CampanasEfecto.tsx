@@ -1,7 +1,9 @@
 import { useCallback, useMemo, useState } from 'react';
 import { conRango, useApi, type Rango } from '../api';
 import Grafico from '../components/Grafico';
-import { barrasTasa, embudo } from '../components/series';
+import { barrasTasa } from '../components/series';
+import { EmbudoEtapas, type Etapa } from '../components/embudo';
+import { useMarcas } from '../incidentes';
 import { Estado, Tabla, Tarjeta, type Columna } from '../components/ui';
 import { etiqueta, fecha, fechaCorta, mesCorto, num, pct } from '../format';
 
@@ -16,31 +18,55 @@ interface Embudo {
 
 const CAMPANAS = ['reminder', 'execute', 'daily', 'recuperacion', 'conasistencia'];
 
+const NOMBRE_ASISTIO: Record<string, string> = {
+  daily: 'Asistieron a la cita',
+  reminder: 'Confirmaron y asistieron',
+  execute: 'Confirmaron y asistieron',
+};
+
 function EmbudoCampana({ rango }: { rango: Rango }) {
   const [campana, setCampana] = useState('reminder');
   const { data, error, cargando } = useApi<Embudo>(conRango('/api/campanas/embudo', rango, { campana }), 300_000);
-  // Entrega y lectura solo existen desde el 30-sep-2026: si el período empieza antes, esas etapas se omiten.
-  const conSeguimiento = !!data?.seguimientoDesde && rango.desde >= data.seguimientoDesde;
+  const marcas = useMarcas(rango, ['whatsapp', 'trazabilidad']);
+  // Entrega y lectura solo existen desde el 30-sep-2026: si el período empieza antes, esas etapas se muestran sin dato.
+  const desde = data?.seguimientoDesde ?? null;
+  const conSeguimiento = !!desde && rango.desde >= desde;
   const pideRespuesta = campana !== 'daily';
+  const pideConfirmar = campana === 'reminder' || campana === 'execute';
 
-  const opt = useCallback(() => {
-    const e = data!.etapas;
-    const etapas = [{ nombre: 'Mensajes enviados', valor: e.aceptados }];
-    if (conSeguimiento) etapas.push({ nombre: 'Entregados', valor: e.entregados }, { nombre: 'Leídos', valor: e.leidos });
-    if (pideRespuesta) etapas.push({ nombre: 'Respondieron', valor: e.respondieron }, { nombre: 'Confirmaron la cita', valor: e.confirmaron });
-    if (campana === 'daily') etapas.push({ nombre: 'Asistieron a la cita', valor: e.asistieron });
-    else if (campana !== 'recuperacion' && campana !== 'conasistencia') etapas.push({ nombre: 'Confirmaron y asistieron', valor: e.confirmaron_y_asistieron });
-    return embudo(etapas);
-  }, [data, conSeguimiento, pideRespuesta, campana]);
+  const etapas = useMemo<Etapa[]>(() => {
+    if (!data) return [];
+    const e = data.etapas;
+    const sinSeguimiento = desde ? `Dato disponible desde el ${fecha(desde)}` : 'Sin dato en el período';
+    const out: Etapa[] = [
+      { nombre: 'Mensajes enviados', valor: e.aceptados, definicion: 'Mensajes que WhatsApp aceptó para entregar.' },
+      { nombre: 'Entregados', valor: conSeguimiento ? e.entregados : null, nota: sinSeguimiento, definicion: 'WhatsApp confirmó que el mensaje llegó al teléfono.' },
+      {
+        nombre: 'Leídos',
+        valor: conSeguimiento ? e.leidos : null,
+        nota: sinSeguimiento,
+        noComparar: true,
+        definicion: 'Es un mínimo: WhatsApp solo informa la lectura si la persona tiene activadas las confirmaciones de lectura. Por eso responden más de los que aparecen como leídos, y la etapa siguiente se compara con los entregados.',
+      },
+    ];
+    if (pideRespuesta) out.push({ nombre: 'Respondieron', valor: e.respondieron, definicion: 'Respondieron al mensaje, a tiempo o tarde.' });
+    if (pideConfirmar) out.push({ nombre: 'Confirmaron la cita', valor: e.confirmaron, definicion: 'Respondieron "confirmo" o la cita pasó a confirmada después del mensaje.' });
+    if (NOMBRE_ASISTIO[campana]) {
+      out.push({
+        nombre: NOMBRE_ASISTIO[campana],
+        valor: campana === 'daily' ? e.asistieron : e.confirmaron_y_asistieron,
+        estimada: true,
+        definicion: 'La cita a la que se refería el mensaje terminó en "Asistió". Solo cuenta citas ya ocurridas.',
+      });
+    }
+    return out;
+  }, [data, desde, conSeguimiento, pideRespuesta, pideConfirmar, campana]);
 
   return (
     <Tarjeta
       titulo="Del mensaje a la cita atendida"
-      ayuda={
-        conSeguimiento || !data?.seguimientoDesde
-          ? 'Porcentaje de cada etapa sobre la anterior.'
-          : `Porcentaje de cada etapa sobre la anterior. Entregados y leídos se muestran solo para períodos desde el ${fecha(data.seguimientoDesde)}.`
-      }
+      marcas={marcas}
+      ayuda="Cuántos mensajes pasan de una etapa a la siguiente, y cuánto se pierde en cada paso."
       accion={
         <select className="boton" value={campana} onChange={(e) => setCampana(e.target.value)}>
           {CAMPANAS.map((c) => (
@@ -49,8 +75,8 @@ function EmbudoCampana({ rango }: { rango: Rango }) {
         </select>
       }
     >
-      <Estado cargando={cargando} error={error} hayDatos={!!data} />
-      {data && (data.etapas.aceptados ? <Grafico opcion={opt} alto={260} /> : <p className="ayuda">Esta campaña no envió mensajes en el período.</p>)}
+      <Estado cargando={cargando} error={error} hayDatos={!!data} forma="bloque" />
+      {data && (data.etapas.aceptados ? <EmbudoEtapas etapas={etapas} /> : <p className="ayuda">Esta campaña no envió mensajes en el período.</p>)}
     </Tarjeta>
   );
 }
@@ -72,6 +98,7 @@ const GRUPOS_CONTACTO: Record<string, string> = {
 
 function ContactoAsistencia({ rango }: { rango: Rango }) {
   const { data, error, cargando } = useApi<Contacto>(conRango('/api/campanas/contacto', rango), 300_000);
+  const marcas = useMarcas(rango, ['whatsapp', 'agenda']);
   const total = useMemo(() => (data?.filas ?? []).reduce((s, f) => s + f.citas, 0), [data]);
   const promedio = useMemo(() => {
     const f = data?.filas ?? [];
@@ -103,11 +130,12 @@ function ContactoAsistencia({ rango }: { rango: Rango }) {
         <div className="grid g2">
           <Tarjeta
             titulo="¿Faltan menos los que confirman por WhatsApp?"
+            marcas={[{ tipo: 'estimada', detalle: 'Mensaje y cita se enlazan por la cita del mensaje o por teléfono y fecha.' }, ...marcas]}
             ayuda="Inasistencia de las citas ya ocurridas, según lo que pasó con sus recordatorios. Es una asociación: quien confirma ya tenía intención de venir."
           >
             <Grafico opcion={opt} alto={240} />
           </Tarjeta>
-          <Tarjeta titulo="¿A cuántas citas les llega el recordatorio?" ayuda="Citas ya ocurridas del período y los recordatorios que recibieron.">
+          <Tarjeta titulo="¿A cuántas citas les llega el recordatorio?" marcas={[{ tipo: 'estimada', detalle: 'Mensaje y cita se enlazan por la cita del mensaje o por teléfono y fecha.' }, ...marcas]} ayuda="Citas ya ocurridas del período y los recordatorios que recibieron.">
             <div className="cifras">
               <div className="cifra">
                 <div className="n">{pct(llego, total, 0)}</div>
@@ -185,6 +213,7 @@ function EfectoRecuperacion() {
   return (
     <Tarjeta
       titulo="¿Las campañas de recuperación traen pacientes de vuelta?"
+      marcas={[{ tipo: 'estimada', detalle: 'El regreso se enlaza por el teléfono: una cita nueva del mismo número en los 30 o 60 días siguientes.' }]}
       ayuda="Compara a quienes recibieron el mensaje con pacientes igual de elegibles que no lo recibieron porque WhatsApp los rechazó durante el incidente de abril. Muestras pequeñas: tómelo como orientación, no como prueba."
     >
       <Estado cargando={cargando} error={error} hayDatos={!!data} />

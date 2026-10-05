@@ -4,8 +4,9 @@ import Grafico, { base, token } from '../components/Grafico';
 import { barrasApiladas, ranking } from '../components/series';
 import { Estado, Kpi, Tabla, Tarjeta, type Columna } from '../components/ui';
 import { DIAS, etiqueta, fecha, num, pct } from '../format';
-import { useSombras } from '../incidentes';
+import { Pestanas, useMarcas, usePestana, useSombras } from '../incidentes';
 import { DemandaChatbot } from './ChatbotDemanda';
+import ChatbotValor from './ChatbotValor';
 import { Restringido, useAcceso } from '../acceso';
 
 type Conteo = { clave: string; n: number };
@@ -51,12 +52,73 @@ const COLS_PASO: Columna<Paso>[] = [
   { clave: 'terminaron', titulo: 'Terminaron aquí', num: true },
 ];
 
-export default function Chatbot({ rango }: { rango: Rango }) {
-  const { data, error, cargando } = useApi<Datos>(conRango('/api/chatbot', rango), 60_000);
-  const [flujo, setFlujo] = useState('agendar');
+/** Flujo inicial del recorrido: el de la URL (#/chatbot?t=recorrido&f=agendar), p. ej. desde una oportunidad de mejora. */
+function flujoDeUrl(): string {
+  const f = new URLSearchParams(location.hash.split('?')[1] ?? '').get('f');
+  return f && FLUJOS.includes(f) ? f : 'agendar';
+}
+
+function Recorrido({ rango }: { rango: Rango }) {
+  const [flujo, setFlujo] = useState(flujoDeUrl);
   const { puede } = useAcceso();
   const embudo = useApi<{ pasos: Paso[]; datosDesde: string | null }>(puede('chatbot.embudo') ? conRango('/api/chatbot/embudo', rango, { flujo }) : null, 120_000);
+  const marcas = useMarcas(rango, ['conversaciones', 'eventos'], embudo.data?.datosDesde);
+  return (
+    <>
+      <Restringido clave="chatbot.embudo" titulo="Recorrido paso a paso">
+      <Tarjeta
+        titulo="Recorrido paso a paso"
+        marcas={marcas}
+        ayuda={embudo.data?.datosDesde ? `Dónde se quedan los pacientes dentro de un trámite. Datos detallados desde el ${fecha(embudo.data.datosDesde)}.` : 'Dónde se quedan los pacientes dentro de un trámite.'}
+        accion={
+          <select className="boton" value={flujo} onChange={(e) => setFlujo(e.target.value)}>
+            {FLUJOS.map((f) => <option key={f} value={f}>{etiqueta(f)}</option>)}
+          </select>
+        }
+      >
+        <Estado cargando={embudo.cargando} error={embudo.error} hayDatos={!!embudo.data} forma="bloque" />
+        {embudo.data && <Tabla filas={embudo.data.pasos} columnas={COLS_PASO} nombreCsv={`recorrido_${flujo}`} vacio="Sin conversaciones de este trámite en el período" />}
+      </Tarjeta>
+      </Restringido>
+      <Restringido clave="chatbot.demanda" titulo="Demanda que el bot no convierte y mensajes no entendidos">
+        <DemandaChatbot rango={rango} />
+      </Restringido>
+    </>
+  );
+}
+
+type VistaChatbot = 'valor' | 'conversaciones' | 'recorrido';
+
+export default function Chatbot({ rango }: { rango: Rango }) {
+  const { puede } = useAcceso();
+  // Quien no tiene la historia del bot (plan Básico) entra directo a sus conversaciones.
+  const [vista, setVista] = usePestana<VistaChatbot>(['valor', 'conversaciones', 'recorrido'], puede('chatbot.historia') ? 'valor' : 'conversaciones');
+  const bloqueadas: VistaChatbot[] = [];
+  if (!['chatbot.historia', 'chatbot.ahorro', 'chatbot.oportunidades'].some(puede)) bloqueadas.push('valor');
+  if (!['chatbot.embudo', 'chatbot.demanda'].some(puede)) bloqueadas.push('recorrido');
+  return (
+    <>
+      <Pestanas<VistaChatbot>
+        bloqueadas={bloqueadas}
+        opciones={[
+          ['valor', 'Lo que aporta el bot'],
+          ['conversaciones', 'Conversaciones'],
+          ['recorrido', 'Paso a paso'],
+        ]}
+        valor={vista}
+        onCambio={setVista}
+      />
+      {vista === 'valor' && <ChatbotValor rango={rango} />}
+      {vista === 'conversaciones' && <Conversaciones rango={rango} />}
+      {vista === 'recorrido' && <Recorrido rango={rango} />}
+    </>
+  );
+}
+
+function Conversaciones({ rango }: { rango: Rango }) {
+  const { data, error, cargando } = useApi<Datos>(conRango('/api/chatbot', rango), 60_000);
   const sombras = useSombras(['conversaciones']);
+  const marcas = useMarcas(rango, ['conversaciones']);
 
   const optSerie = useCallback(
     () => barrasApiladas(data!.serie.map((s) => s.periodo), { Completadas: data!.serie.map((s) => s.completadas), Abandonadas: data!.serie.map((s) => s.abandonadas) }, data!.rango.grano, sombras),
@@ -103,6 +165,7 @@ export default function Chatbot({ rango }: { rango: Rango }) {
           </div>
           <Tarjeta
             titulo="¿Cuántos logran lo que vinieron a hacer?"
+            marcas={marcas}
             ayuda="De las conversaciones que entraron a cada trámite, cuántas terminaron con el trámite hecho. El resto abandonó, pidió un asesor o no encontró lo que buscaba."
           >
             <div className="cifras">
@@ -118,8 +181,7 @@ export default function Chatbot({ rango }: { rango: Rango }) {
             </div>
             {data.conversion.some((c) => c.clave === 'agendar' && c.entraron > 0 && c.lograron / c.entraron < 0.3) && (
               <p className="nota">
-                Agendar convierte poco. Una causa conocida: el registro de pacientes nuevos por el bot falla desde septiembre de 2025, así que solo agendan
-                pacientes ya registrados. Vea el recorrido paso a paso más abajo para saber dónde se quedan.
+                Agendar convierte poco. La pestaña «Paso a paso» muestra en qué paso se quedan.
               </p>
             )}
             {k.derivadas_fuera_horario > 0 && (
@@ -142,23 +204,6 @@ export default function Chatbot({ rango }: { rango: Rango }) {
           </Tarjeta>
         </>
       )}
-      <Restringido clave="chatbot.demanda" titulo="Demanda que el bot no convierte y mensajes no entendidos">
-        <DemandaChatbot rango={rango} />
-      </Restringido>
-      <Restringido clave="chatbot.embudo" titulo="Recorrido paso a paso">
-      <Tarjeta
-        titulo="Recorrido paso a paso"
-        ayuda={embudo.data?.datosDesde ? `Dónde se quedan los pacientes dentro de un trámite. Datos detallados desde el ${fecha(embudo.data.datosDesde)}.` : 'Dónde se quedan los pacientes dentro de un trámite.'}
-        accion={
-          <select className="boton" value={flujo} onChange={(e) => setFlujo(e.target.value)}>
-            {FLUJOS.map((f) => <option key={f} value={f}>{etiqueta(f)}</option>)}
-          </select>
-        }
-      >
-        <Estado cargando={embudo.cargando} error={embudo.error} hayDatos={!!embudo.data} />
-        {embudo.data && <Tabla filas={embudo.data.pasos} columnas={COLS_PASO} nombreCsv={`recorrido_${flujo}`} vacio="Sin conversaciones de este trámite en el período" />}
-      </Tarjeta>
-      </Restringido>
     </>
   );
 }

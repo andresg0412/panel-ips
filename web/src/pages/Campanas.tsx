@@ -1,12 +1,13 @@
 import { useCallback, useMemo, useState } from 'react';
 import { conRango, getJson, useApi, type Rango } from '../api';
 import Grafico from '../components/Grafico';
-import { barrasApiladas, lineas, pivotar } from '../components/series';
-import { Pestanas, usePestana, useSombras } from '../incidentes';
+import { barrasApiladas, pivotar } from '../components/series';
+import { Pestanas, useMarcas, usePestana, useSombras } from '../incidentes';
 import { Bloqueado, Restringido, useAcceso } from '../acceso';
 import CampanasEfecto, { CalendarioEjecuciones } from './CampanasEfecto';
+import CampanasDesempeno from './CampanasDesempeno';
 import { descargarCsv, Estado, Tabla, Tarjeta, type Columna } from '../components/ui';
-import { etiqueta, fecha, fechaHora, hora, num, pct, ratio, tasaTxt } from '../format';
+import { etiqueta, fecha, fechaHora, hora, num, pct } from '../format';
 
 interface FilaCampana {
   campana: string;
@@ -27,10 +28,6 @@ interface Datos {
   porCampana: FilaCampana[];
   serie: { periodo: string; campana: string | null; enviados: number }[];
   entregaDesde: string | null;
-}
-interface Tiempos {
-  respuesta: { campana: string; hora: number; enviados: number; acumulado: number }[];
-  lectura: { leidos: number; entregados: number; mediana_lectura_min: number | null; mediana_respuesta_min: number | null };
 }
 interface Calidad {
   errores: { codigo: string; error: string; n: number; desde: string; hasta: string }[];
@@ -62,9 +59,6 @@ const COLS_TEL: Columna<TelefonoInvalido>[] = [
   { clave: 'email', titulo: 'Correo' },
   { clave: 'problema', titulo: 'Problema' },
 ];
-
-const minutosTxt = (m: number | null) =>
-  m === null || m === undefined ? '—' : m < 60 ? `${Math.round(m)} min` : `${(m / 60).toFixed(1).replace('.', ',')} h`;
 
 interface Envio {
   enviado: string;
@@ -132,9 +126,9 @@ function CampanasResultados({ rango }: { rango: Rango }) {
   const { data, error, cargando } = useApi<Datos>(conRango('/api/campanas', rango), 60_000);
   const { puede } = useAcceso();
   const exportarPersonales = puede('exportar.personales');
-  const tiempos = useApi<Tiempos>(puede('campanas.tiempos') ? conRango('/api/campanas/tiempos', rango) : null, 120_000);
   const calidad = useApi<Calidad>(puede('campanas.calidad') ? conRango('/api/campanas/calidad', rango) : null, 300_000);
   const sombras = useSombras(['whatsapp', 'trazabilidad']);
+  const marcas = useMarcas(rango, ['whatsapp', 'trazabilidad'], data?.entregaDesde);
   const [exportandoTel, setExportandoTel] = useState(false);
   const [campana, setCampana] = useState('');
   const [respuesta, setRespuesta] = useState('');
@@ -159,25 +153,6 @@ function CampanasResultados({ rango }: { rango: Rango }) {
     opt.series.forEach((s: any) => (s.name = s.name === 'Otras' ? 'Otras' : etiqueta(s.name)));
     return opt;
   }, [data, grupos, sombras]);
-
-  // CAM-06: % acumulado de respuesta según las horas desde el envío, una curva por campaña.
-  const optTiempos = useCallback(() => {
-    const filas = tiempos.data!.respuesta;
-    const horas = [...new Set(filas.map((f) => f.hora))].sort((a, b) => a - b);
-    const series: Record<string, (number | null)[]> = {};
-    for (const c of ['execute', 'reminder', 'recuperacion', 'conasistencia']) {
-      const fc = filas.filter((f) => f.campana === c);
-      if (!fc.length) continue;
-      series[c] = horas.map((h) => {
-        const f = fc.find((x) => x.hora === h);
-        return f && f.enviados ? f.acumulado / f.enviados : null;
-      });
-    }
-    const opt = lineas(horas.map(String), series, 'day', undefined, true) as any;
-    opt.xAxis.data = horas.map((h) => (h < 24 ? `${h} h` : `${h / 24} d`));
-    opt.series.forEach((s: any) => (s.name = etiqueta(s.name)));
-    return opt;
-  }, [tiempos.data]);
 
   const exportarTelefonos = async () => {
     setExportandoTel(true);
@@ -210,6 +185,7 @@ function CampanasResultados({ rango }: { rango: Rango }) {
         <>
           <Tarjeta
             titulo="Resultados por campaña"
+            marcas={marcas}
             ayuda={`Confirmaron: respondieron "confirmo" o la cita pasó a confirmada después del mensaje. ${
               data.entregaDesde ? `Entregados y leídos se conocen desde el ${fecha(data.entregaDesde)}.` : ''
             }`}
@@ -220,38 +196,6 @@ function CampanasResultados({ rango }: { rango: Rango }) {
             <Grafico opcion={opcion} />
           </Tarjeta>
         </>
-      )}
-
-      {!puede('campanas.tiempos') && <Bloqueado clave="campanas.tiempos" titulo="¿Cuánto tardan en leer y responder?" />}
-      {tiempos.data && (
-        <div className="grid g2">
-          <Tarjeta
-            titulo="¿Cuánto tardan en responder?"
-            ayuda="Porcentaje de pacientes que ya respondió según el tiempo transcurrido desde el envío. Sirve para decidir cuánto esperar antes de insistir."
-          >
-            {tiempos.data.respuesta.length ? (
-              <Grafico opcion={optTiempos} alto={260} />
-            ) : (
-              <p className="ayuda">Sin envíos que pidan respuesta en este período.</p>
-            )}
-          </Tarjeta>
-          <Tarjeta titulo="Lectura y respuesta" ayuda="La lectura solo se conoce para envíos desde el 30 sep 2026.">
-            <div className="cifras">
-              <div className="cifra">
-                <div className="n">{minutosTxt(tiempos.data.lectura.mediana_respuesta_min)}</div>
-                <div className="t">tiempo típico hasta responder</div>
-              </div>
-              <div className="cifra">
-                <div className="n">{minutosTxt(tiempos.data.lectura.mediana_lectura_min)}</div>
-                <div className="t">tiempo típico hasta leer</div>
-              </div>
-              <div className="cifra">
-                <div className="n">{tasaTxt(ratio(tiempos.data.lectura.leidos, tiempos.data.lectura.entregados), 0)}</div>
-                <div className="t">de los mensajes entregados fueron leídos</div>
-              </div>
-            </div>
-          </Tarjeta>
-        </div>
       )}
 
       {!puede('campanas.calidad') && <Bloqueado clave="campanas.calidad" titulo="Errores de envío y calidad de los teléfonos" />}
@@ -326,12 +270,14 @@ function CampanasResultados({ rango }: { rango: Rango }) {
   );
 }
 
-type VistaCampanas = 'resultados' | 'efecto' | 'ejecuciones';
+type VistaCampanas = 'resultados' | 'efecto' | 'desempeno' | 'ejecuciones';
 
 export default function Campanas({ rango }: { rango: Rango }) {
-  const [vista, setVista] = usePestana<VistaCampanas>(['resultados', 'efecto', 'ejecuciones'], 'resultados');
+  const [vista, setVista] = usePestana<VistaCampanas>(['resultados', 'efecto', 'desempeno', 'ejecuciones'], 'resultados');
   const { puede } = useAcceso();
   const bloqueadas = ([['efecto', 'campanas.efecto'], ['ejecuciones', 'campanas.ejecuciones']] as const).filter(([, f]) => !puede(f)).map(([v]) => v as VistaCampanas);
+  // Desempeño reúne tres funciones del plan Full: se bloquea solo si no tiene ninguna.
+  if (!['campanas.rankings', 'campanas.tiempos', 'campanas.fatiga'].some(puede)) bloqueadas.push('desempeno');
   return (
     <>
       <Pestanas<VistaCampanas>
@@ -339,6 +285,7 @@ export default function Campanas({ rango }: { rango: Rango }) {
         opciones={[
           ['resultados', 'Resultados'],
           ['efecto', 'Efecto en las citas'],
+          ['desempeno', 'Desempeño'],
           ['ejecuciones', 'Ejecuciones'],
         ]}
         valor={vista}
@@ -346,6 +293,7 @@ export default function Campanas({ rango }: { rango: Rango }) {
       />
       {vista === 'resultados' && <CampanasResultados rango={rango} />}
       {vista === 'efecto' && (bloqueadas.includes('efecto') ? <Bloqueado clave="campanas.efecto" titulo="Efecto de las campañas en las citas" alto={280} /> : <CampanasEfecto rango={rango} />)}
+      {vista === 'desempeno' && <CampanasDesempeno rango={rango} />}
       {vista === 'ejecuciones' && bloqueadas.includes('ejecuciones') && <Bloqueado clave="campanas.ejecuciones" titulo="Ejecuciones de las campañas" alto={280} />}
       {vista === 'ejecuciones' && !bloqueadas.includes('ejecuciones') && (
         <Tarjeta

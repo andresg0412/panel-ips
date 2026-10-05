@@ -7,7 +7,7 @@ import {
   EditorMetas, KpiPrincipal, ListaAtencion, ListaFrases, MedidorConfianza,
   type Confianza, type Frase, type ItemAtencion, type Meta, type MetaKpi,
 } from '../components/sala';
-import { useSombras } from '../incidentes';
+import { useMarcas, useSombras } from '../incidentes';
 import { Bloqueado, Restringido, useAcceso } from '../acceso';
 import { fecha, num, ratio, tasaTxt } from '../format';
 
@@ -73,6 +73,10 @@ export default function Resumen({ rango }: { rango: Rango }) {
   const incAgenda = useSombras(['agenda']);
   const incWhatsapp = useSombras(['whatsapp', 'trazabilidad']);
   const incConv = useSombras(['conversaciones']);
+  const marcasAgenda = useMarcas(rango, ['agenda']);
+  const marcasWhatsapp = useMarcas(rango, ['whatsapp', 'trazabilidad']);
+  const marcasConv = useMarcas(rango, ['conversaciones']);
+  const marcasBot = useMarcas(rango, ['conversaciones', 'whatsapp']);
 
   const optCitas = useCallback(() => {
     const d = s.data!;
@@ -189,7 +193,7 @@ export default function Resumen({ rango }: { rango: Rango }) {
       )}
 
       {a && (
-        <Tarjeta titulo="Lo que hizo el bot" ayuda="Trámites que los pacientes resolvieron por WhatsApp, sin pasar por recepción.">
+        <Tarjeta titulo="Lo que hizo el bot" marcas={marcasBot} ayuda="Trámites que los pacientes resolvieron por WhatsApp, sin pasar por recepción.">
           <div className="cifras">
             <div className="cifra"><div className="n">{num(a.envios.confirmaron)}</div><div className="t">confirmaron su cita respondiendo el mensaje</div></div>
             <div className="cifra"><div className="n">{num(a.sesiones.citas_creadas)}</div><div className="t">agendaron una cita</div></div>
@@ -207,14 +211,14 @@ export default function Resumen({ rango }: { rango: Rango }) {
       <Estado cargando={s.cargando} error={s.error} hayDatos={!!s.data} forma="bloque" />
       {s.data && (
         <>
-          <Tarjeta titulo="Citas por estado" ayuda="Según la fecha de la cita. No incluye reuniones internas. Sin cierre: cita pasada que sigue pendiente; no se sabe si ocurrió.">
+          <Tarjeta titulo="Citas por estado" marcas={marcasAgenda} ayuda="Según la fecha de la cita. No incluye reuniones internas. Sin cierre: cita pasada que sigue pendiente; no se sabe si ocurrió.">
             <Grafico opcion={optCitas} />
           </Tarjeta>
           <div className="grid g2">
-            <Tarjeta titulo="Mensajes de campaña" ayuda="Enviados: aceptados por WhatsApp. Fallidos: WhatsApp rechazó el envío y el paciente no recibió nada.">
+            <Tarjeta titulo="Mensajes de campaña" marcas={marcasWhatsapp} ayuda="Enviados: aceptados por WhatsApp. Fallidos: WhatsApp rechazó el envío y el paciente no recibió nada.">
               <Grafico opcion={optEnvios} alto={260} />
             </Tarjeta>
-            <Tarjeta titulo="Conversaciones con el bot" ayuda="Abandonada: el paciente dejó de responder antes de terminar.">
+            <Tarjeta titulo="Conversaciones con el bot" marcas={marcasConv} ayuda="Abandonada: el paciente dejó de responder antes de terminar.">
               <Grafico opcion={optSesiones} alto={260} />
             </Tarjeta>
           </div>

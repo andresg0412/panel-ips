@@ -12,6 +12,8 @@ import { datosResumen, fraccionEnIncidente, periodoComparacion } from './resumen
 import { incidentes } from '../incidentes.js';
 import { alertasConEstado } from './alertas.js';
 import { INDICADORES, leerMetas } from '../metas.js';
+import { horasDe, leerParametros, minutosAhorrados } from '../parametros.js';
+import { rangoNivel } from '../funciones.js';
 
 type N = Record<string, number>;
 
@@ -138,7 +140,7 @@ async function semanas(hasta: string, baseP: Promise<Base>) {
 }
 
 // ------------------------------------------------------------------------- lo más relevante
-async function relevante(r: Rango, baseP: Promise<Base>) {
+async function relevante(r: Rango, baseP: Promise<Base>, conHoras: boolean) {
   const datos = await datosResumen(r);
   const a = datos.actual as unknown as { citas: N; envios: N; sesiones: N; listaEspera: N };
   const p = datos.anterior as unknown as { citas: N; envios: N; sesiones: N } | null;
@@ -225,9 +227,20 @@ async function relevante(r: Rango, baseP: Promise<Base>) {
   const t = tramites(a);
   if (t > 0) {
     const fh = ratio(a.sesiones.fuera_horario, a.sesiones.total);
+    // Plan Full: las horas de recepción que equivalen esos trámites (Etapa 3).
+    let horas = '';
+    if (conHoras) {
+      const h = horasDe(
+        minutosAhorrados(
+          { agendadas: a.sesiones.citas_creadas, reprogramadas: a.sesiones.citas_reprogramadas, canceladas: a.sesiones.citas_canceladas, confirmadas: a.envios.confirmaron },
+          await leerParametros(),
+        ),
+      );
+      if (h >= 1) horas = ` (unas **${num(h)} horas** de trabajo de recepción)`;
+    }
     frases.push({
       clave: 'bot',
-      texto: `El bot resolvió **${num(t)} trámites** sin pasar por recepción${fh !== null && fh >= 0.05 ? `, y el ${pct(fh, 0)} de las conversaciones llegó fuera de horario` : ''}.`,
+      texto: `El bot resolvió **${num(t)} trámites** sin pasar por recepción${horas}${fh !== null && fh >= 0.05 ? `, y el ${pct(fh, 0)} de las conversaciones llegó fuera de horario` : ''}.`,
       tono: 'positivo',
       enlace: '#/chatbot',
     });
@@ -476,7 +489,9 @@ export default async function rutasSala(app: FastifyInstance) {
       const baseP = base(r, periodoComparacion(r));
       // Evita un rechazo "no manejado" (que tumbaría el proceso) si falla antes de que un bloque la espere.
       baseP.catch(() => {});
-      const [tendencia, frases, items] = await Promise.all([semanas(r.hasta, baseP), relevante(r, baseP), atencion(r)]);
+      // Depende solo del nivel (que va en la clave de la caché), no del rol.
+      const conHoras = rangoNivel(req.contexto?.nivel ?? 'full') >= rangoNivel('full');
+      const [tendencia, frases, items] = await Promise.all([semanas(r.hasta, baseP), relevante(r, baseP, conHoras), atencion(r)]);
       return { tendencia, relevante: frases, atencion: items };
     }, 300_000);
   });

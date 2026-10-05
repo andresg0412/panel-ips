@@ -3,7 +3,7 @@ import { useApi, type Rango } from '../api';
 import Grafico from '../components/Grafico';
 import { barrasApiladas } from '../components/series';
 import { Estado, Kpi, Tabla, Tarjeta, type Columna } from '../components/ui';
-import { useMesesConfiables, useSombras } from '../incidentes';
+import { useMarcas, useMesesConfiables, useSombras } from '../incidentes';
 import { etiqueta, num, pct } from '../format';
 import { Restringido, useAcceso } from '../acceso';
 
@@ -34,6 +34,8 @@ export default function Marketing(_: { rango: Rango }) {
   const { data, error, cargando } = useApi<Marketing>('/api/marketing');
   const { puede } = useAcceso();
   const sombras = useSombras(['whatsapp']);
+  // El gráfico cubre desde el inicio de los datos, sin importar el período elegido.
+  const marcas = useMarcas({ desde: '2025-08-01', hasta: '9999-12-31' }, ['whatsapp']);
   const alcance = useMemo(() => (data?.alcance ?? []).filter((m) => m.mes >= '2025-08'), [data]);
 
   const optAlcance = useCallback(
@@ -67,6 +69,7 @@ export default function Marketing(_: { rango: Rango }) {
           </div>
           <Tarjeta
             titulo="Alcance de WhatsApp por mes"
+            marcas={marcas}
             ayuda="Personas distintas que recibieron al menos un mensaje de campaña, y cuántas respondieron. De abril a julio de 2026 los mensajes no llegaron (incidente)."
           >
             <Grafico opcion={optAlcance} alto={280} />

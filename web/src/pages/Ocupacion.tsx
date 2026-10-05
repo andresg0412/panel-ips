@@ -5,6 +5,7 @@ import { barrasTasa, mapaCalor } from '../components/series';
 import { Estado, ListaConteo, Tarjeta } from '../components/ui';
 import { DIAS, etiqueta, fecha, fechaCorta, num, pct, tasaTxt } from '../format';
 import { Restringido } from '../acceso';
+import { useMarcas } from '../incidentes';
 
 interface Ocupacion {
   desde: string;
@@ -20,6 +21,7 @@ const nombreCorto = (n: string) => n.replace(/\s+/g, ' ').split(' ').slice(0, 2)
 
 /** PRO-01 (ocupación) y PRO-03 (cupos libres de los próximos 14 días). */
 export default function OcupacionProfesionales({ rango }: { rango: Rango }) {
+  const marcas = useMarcas(rango, ['agenda']);
   const { data, error, cargando } = useApi<Ocupacion>(conRango('/api/profesionales/ocupacion', rango), 300_000);
   const sinRango = rango.hasta < (data?.capacidadDesde ?? '2026-08-06');
 
@@ -70,6 +72,7 @@ export default function OcupacionProfesionales({ rango }: { rango: Rango }) {
           <div className="grid g2">
             <Tarjeta
               titulo="¿Qué tan llena está la agenda?"
+              marcas={[{ tipo: 'estimada' as const, detalle: 'La capacidad sale del horario vigente de cada profesional (no hay historial de horarios) y no descuenta ausencias ni festivos que falten en el sistema.' }, ...marcas]}
               ayuda={`Cupos ocupados por citas de pacientes sobre los cupos de su horario, días ya pasados${sinRango ? '' : ` del ${fecha(data.desde)} al ${fecha(data.hasta)}`}. Se puede medir desde el ${fecha(data.capacidadDesde)} y solo para profesionales con horario registrado.`}
             >
               {data.porProfesional.length ? <Grafico opcion={optOcupacion} alto={Math.max(200, data.porProfesional.length * 34)} /> : <p className="ayuda">Sin datos de ocupación para este período.</p>}
@@ -81,6 +84,7 @@ export default function OcupacionProfesionales({ rango }: { rango: Rango }) {
           <Restringido clave="profesionales.capacidad" titulo="Cupos libres en los próximos 14 días">
           <Tarjeta
             titulo="Cupos libres en los próximos 14 días"
+            marcas={[{ tipo: 'estimada' as const, detalle: 'La capacidad sale del horario vigente de cada profesional (no hay historial de horarios) y no descuenta ausencias ni festivos que falten en el sistema.' }]}
             ayuda={`${num(totalLibres)} cupos sin cita según el horario de cada profesional. Sirve para ofrecer citas o activar la lista de espera. Conviene validarlo con recepción.`}
           >
             {data.libres.length ? <Grafico opcion={optLibres} alto={Math.max(220, new Set(data.libres.map((l) => l.profesional)).size * 34 + 80)} /> : <p className="ayuda">Sin datos.</p>}
@@ -141,6 +145,7 @@ export function AgendaProximas() {
         <div className="grid g2">
           <Tarjeta
             titulo="¿Cómo viene la agenda?"
+            marcas={[{ tipo: 'estimada', detalle: 'Proyección: las semanas lejanas todavía se están llenando con citas nuevas.' }]}
             ayuda="Citas de pacientes ya agendadas para las próximas semanas. Las semanas lejanas se van llenando con el tiempo: compare con la línea del año pasado con esa cautela."
           >
             <Grafico opcion={opt} alto={280} />
@@ -162,12 +167,14 @@ const TRAMOS: Record<string, string> = {
 
 export function AnticipacionCancelaciones({ rango }: { rango: Rango }) {
   const { data } = useApi<{ tramos: { clave: string; n: number }[] }>(conRango('/api/agenda/cancelaciones', rango), 300_000);
+  const marcas = useMarcas(rango, ['agenda'], '2026-09-30');
   if (!data) return null;
   const medidas = data.tramos.filter((t) => t.clave !== 'sin_dato');
   const n = medidas.reduce((s, t) => s + t.n, 0);
   return (
     <Tarjeta
       titulo="¿Con cuánta anticipación cancelan?"
+      marcas={marcas}
       ayuda="Solo se conoce la hora de cancelación desde el 30 sep 2026. Con 3 días o más, el cupo se puede ofrecer a la lista de espera."
     >
       {n < 50 ? (

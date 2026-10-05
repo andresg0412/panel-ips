@@ -73,9 +73,15 @@ export const FUNCIONES: Funcion[] = [
   { clave: 'campanas.efecto', pagina: 'campanas', nivel: 'intermedio', titulo: 'Efecto de las campañas en la asistencia' },
   { clave: 'campanas.ejecuciones', pagina: 'campanas', nivel: 'intermedio', titulo: 'Calendario de ejecuciones de las campañas' },
   { clave: 'campanas.tiempos', pagina: 'campanas', nivel: 'full', titulo: 'Tiempos de lectura y de respuesta' },
+  { clave: 'campanas.rankings', pagina: 'campanas', nivel: 'full', titulo: 'Rankings de campañas: más efectivas, con más respuesta y con más fallos' },
+  { clave: 'campanas.fatiga', pagina: 'campanas', nivel: 'full', titulo: 'Fatiga de mensajes: quién recibe demasiados y si responde menos' },
 
   { clave: 'chatbot.conversaciones', pagina: 'chatbot', nivel: 'basico', titulo: 'Conversaciones con el asistente de WhatsApp' },
+  { clave: 'chatbot.historia', pagina: 'chatbot', nivel: 'intermedio', titulo: 'Embudo de las conversaciones y trámites resueltos sin recepción' },
   { clave: 'chatbot.embudo', pagina: 'chatbot', nivel: 'intermedio', titulo: 'Recorrido paso a paso de cada trámite' },
+  { clave: 'chatbot.ahorro', pagina: 'chatbot', nivel: 'full', titulo: 'Horas de recepción ahorradas por el bot' },
+  { clave: 'chatbot.oportunidades', pagina: 'chatbot', nivel: 'full', titulo: 'Oportunidades de mejora del bot, en frases' },
+  { clave: 'parametros.editar', pagina: 'chatbot', nivel: 'full', titulo: 'Ajustar los minutos por trámite', roles: ['direccion'] },
   { clave: 'chatbot.demanda', pagina: 'chatbot', nivel: 'full', titulo: 'Demanda que el bot no convierte y mensajes no entendidos' },
 
   { clave: 'pacientes.panorama', pagina: 'pacientes', nivel: 'basico', titulo: 'Pacientes nuevos y recurrentes' },
@@ -143,10 +149,15 @@ export const ENDPOINTS: Record<string, string> = {
   'GET /api/campanas/recuperacion': 'campanas.efecto',
   'GET /api/campanas/ejecuciones': 'campanas.ejecuciones',
   'GET /api/campanas/tiempos': 'campanas.tiempos',
+  'GET /api/campanas/fatiga': 'campanas.fatiga',
 
   'GET /api/chatbot': 'chatbot.conversaciones',
   'GET /api/chatbot/embudo': 'chatbot.embudo',
   'GET /api/chatbot/demanda': 'chatbot.demanda',
+  'GET /api/chatbot/historia': 'chatbot.historia',
+  'GET /api/chatbot/ahorro': 'chatbot.ahorro',
+  'GET /api/chatbot/oportunidades': 'chatbot.oportunidades',
+  'PUT /api/parametros': 'parametros.editar',
 
   'GET /api/pacientes/panorama': 'pacientes.panorama',
   'GET /api/pacientes/ciclo': 'pacientes.retencion',
@@ -177,7 +188,6 @@ export const TAM_MAX_SIN_EXPORTAR = 100;
 
 /** Funcionalidades del plan Full que todavía no existen (se muestran como "en desarrollo" en Mi plan). */
 export const PROXIMAMENTE: { titulo: string; nivel: Nivel }[] = [
-  { titulo: 'Horas de recepción ahorradas por el bot y oportunidades de mejora', nivel: 'full' },
   { titulo: 'Centro de capacidad de la agenda y cupos recuperables', nivel: 'full' },
   { titulo: 'Informe ejecutivo mensual en PDF', nivel: 'full' },
   { titulo: 'Resumen semanal por correo', nivel: 'full' },

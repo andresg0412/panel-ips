@@ -3,7 +3,7 @@ import { conRango, useApi, type Rango } from '../api';
 import Grafico, { base, token } from '../components/Grafico';
 import { barrasApiladas, ranking } from '../components/series';
 import { Estado, Kpi, Tarjeta } from '../components/ui';
-import { useMesesConfiables, useSombras } from '../incidentes';
+import { useMarcas, useMesesConfiables, useSombras } from '../incidentes';
 import { etiqueta, num } from '../format';
 
 interface Panorama {
@@ -16,6 +16,7 @@ interface Panorama {
 export default function PacientesPanorama({ rango }: { rango: Rango }) {
   const { data, error, cargando } = useApi<Panorama>(conRango('/api/pacientes/panorama', rango), 300_000);
   const sombras = useSombras(['agenda']);
+  const marcasHistoria = useMarcas({ desde: '2025-08-01', hasta: rango.hasta }, ['agenda']);
 
   // PAC-01: agosto de 2025 se omite porque es la carga inicial (todos parecen "nuevos").
   const mensual = useMemo(() => (data?.mensual ?? []).filter((m) => m.mes >= '2025-09'), [data]);
@@ -89,6 +90,7 @@ export default function PacientesPanorama({ rango }: { rango: Rango }) {
           </div>
           <Tarjeta
             titulo="Pacientes nuevos y recurrentes atendidos por mes"
+            marcas={marcasHistoria}
             ayuda="Nuevo: su primera atención registrada fue ese mes. Desde septiembre de 2025 (agosto es el inicio de los datos e incluye a quienes ya venían)."
           >
             <Grafico opcion={optMensual} alto={280} />

@@ -2,6 +2,7 @@ import { createContext, useContext, useMemo, useState } from 'react';
 import type { Rango } from './api';
 import type { Sombra } from './components/series';
 import { Candado } from './acceso';
+import type { MarcaDato } from './components/ui';
 
 // Incidentes de datos conocidos (TR-01). Los entrega /api/incidentes; aquí se reparten a las pantallas.
 export type Area = 'general' | 'agenda' | 'whatsapp' | 'conversaciones' | 'eventos' | 'trazabilidad';
@@ -35,6 +36,21 @@ export function useSombras(areas: Area[]): Sombra[] {
     return comoSombras(especificos.length ? especificos : todos.filter((i) => i.area === 'general'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [todos, clave]);
+}
+
+/**
+ * Distintivo "Afectada por incidente" si el período toca un incidente de esas áreas (o uno general). Además, si se
+ * indica `datosDesde` y el período empieza antes, "Incompleta".
+ */
+export function useMarcas(rango: Rango, areas: Area[], datosDesde?: string | null): MarcaDato[] {
+  const todos = useContext(IncidentesCtx);
+  const out: MarcaDato[] = [];
+  const toca = todos.filter((i) => (areas.includes(i.area) || i.area === 'general') && i.desde <= rango.hasta && i.hasta >= rango.desde);
+  if (toca.length) out.push({ tipo: 'incidente', detalle: `El período toca: ${toca.map((i) => i.titulo).join('; ')}. La cifra puede quedar por debajo de la real.` });
+  if (datosDesde && rango.desde < datosDesde) {
+    out.push({ tipo: 'incompleta', detalle: `Este dato existe desde el ${datosDesde.split('-').reverse().join('/')}: los días anteriores del período no lo tienen.` });
+  }
+  return out;
 }
 
 const DIA = 86_400_000;

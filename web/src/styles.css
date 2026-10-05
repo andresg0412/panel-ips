@@ -413,3 +413,47 @@ button.enlace:disabled { opacity: 0.5; cursor: default; }
   .campanita, .barra-movil, .seccion-titulo .boton { display: none !important; }
   .kpi-principal { break-inside: avoid; }
 }
+
+/* Etapa 3: tipo de métrica junto al título de la tarjeta (no es un aviso). */
+.card h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.marca { position: relative; display: inline-flex; align-items: center; font-size: 10.5px; font-weight: 600; letter-spacing: 0.01em; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--ink-2); background: var(--surface-2); cursor: help; white-space: nowrap; }
+.marca-estimada { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
+.marca-incompleta { color: color-mix(in srgb, var(--warning) 70%, var(--ink)); background: color-mix(in srgb, var(--warning) 14%, transparent); border-color: transparent; }
+.marca-incidente { color: var(--ink-2); background: var(--incidente); border-style: dashed; }
+.marca::after { content: attr(data-tip); position: absolute; left: 0; top: calc(100% + 6px); width: max-content; max-width: 280px; padding: 8px 10px; border-radius: 8px; background: var(--ink); color: var(--page); font-size: 12px; font-weight: 400; line-height: 1.4; white-space: normal; opacity: 0; pointer-events: none; transition: opacity 0.15s; z-index: 40; }
+.marca:hover::after, .marca:focus::after { opacity: 1; }
+.marca:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Embudo por etapas (campañas y chatbot). */
+.embudo { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.embudo-etapa { display: grid; grid-template-columns: minmax(150px, 220px) 1fr 330px; gap: 4px 14px; align-items: center; }
+.embudo-nombre { font-size: 13.5px; color: var(--ink); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.embudo-barra { position: relative; height: 26px; background: var(--surface-2); border-radius: 6px; overflow: hidden; }
+.embudo-barra > span { position: absolute; inset: 0 auto 0 0; background: var(--s1); border-radius: 6px; transition: width 0.4s ease; }
+.embudo-etapa.estimada .embudo-barra > span { background: repeating-linear-gradient(135deg, var(--s1) 0 6px, color-mix(in srgb, var(--s1) 70%, var(--surface)) 6px 10px); }
+.embudo-cifras { font-variant-numeric: tabular-nums; font-size: 13px; display: flex; gap: 10px; align-items: baseline; justify-content: flex-end; white-space: nowrap; }
+.embudo-cifras b { font-size: 15px; }
+.embudo-caida { color: var(--down); font-size: 12px; }
+.embudo-etapa.sin-dato .embudo-nombre, .embudo-etapa.sin-dato .embudo-cifras { color: var(--muted); }
+.embudo-etapa.sin-dato .embudo-barra { background: repeating-linear-gradient(90deg, var(--grid) 0 4px, transparent 4px 8px); opacity: 0.6; }
+.embudo-rama { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--grid); }
+@media (prefers-reduced-motion: reduce) { .embudo-barra > span { transition: none; } }
+@media (max-width: 720px) {
+  .embudo-etapa { grid-template-columns: 1fr; }
+  .embudo-cifras { justify-content: flex-start; }
+}
+
+/* Rankings de campañas. */
+.rankings { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.ranking h4 { margin: 0 0 8px; font-size: 13px; color: var(--ink-2); font-weight: 600; }
+.ranking ol { margin: 0; padding: 0; list-style: none; counter-reset: pos; }
+.ranking li { counter-increment: pos; display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--grid); font-size: 13.5px; }
+.ranking li::before { content: counter(pos); width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; background: var(--surface-2); color: var(--ink-2); }
+.ranking li:first-child::before { background: var(--accent); color: #fff; }
+.ranking li .v { font-variant-numeric: tabular-nums; font-weight: 600; }
+.ranking li .n { color: var(--muted); font-size: 11.5px; font-weight: 400; margin-left: 4px; }
+
+/* Horas de recepción ahorradas. */
+.ahorro-cabeza { display: flex; flex-wrap: wrap; gap: 8px 28px; align-items: flex-end; margin-bottom: 12px; }
+.ahorro-horas { font-size: 40px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.ahorro-horas small { font-size: 15px; font-weight: 500; color: var(--ink-2); margin-left: 6px; }
