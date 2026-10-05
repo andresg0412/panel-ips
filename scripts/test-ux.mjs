@@ -43,6 +43,6 @@ check('Los bloques plegados se imprimen abiertos', css.includes('.bloque-detalle
 check('En móvil la barra superior queda por encima de la barra de herramientas', Number(css.match(/\.barra-movil \{[^}]*z-index: (\d+)/)[1]) > Number(css.match(/\.herramientas \{ position: sticky[^}]*z-index: (\d+)/)[1]));
 check('La barra de acciones es persistente al desplazarse', css.includes('.herramientas { position: sticky'));
 check('La primera columna de las tablas queda fija', css.includes('.tabla-wrap th:first-child, .tabla-wrap td:first-child'));
-check('Las pestañas son utilizables en pantallas estrechas', css.includes('.pestanas { display: flex; flex-wrap: nowrap') && css.includes('overflow-x: auto'));
+check('Las pestañas bajan de línea en vez de mostrar barras de scroll', css.includes('.pestanas { display: flex; flex-wrap: wrap;') && !/\.pestanas \{[^}]*overflow/.test(css));
 
 console.log(`UX smoke test: ${checks.length} comprobaciones OK`);

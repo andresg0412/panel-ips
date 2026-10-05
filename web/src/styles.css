@@ -245,7 +245,7 @@ tr:hover td { background: var(--surface-2); }
 
 /* Pestañas dentro de una pantalla */
 .pestanas-wrap { margin-bottom: 16px; }
-.pestanas { display: flex; flex-wrap: nowrap; gap: 4px; overflow-x: auto; border-bottom: 1px solid var(--border); margin-bottom: 0; scrollbar-width: thin; }
+.pestanas { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 0; }
 .pestanas button { flex: none; border: 0; background: none; padding: 8px 12px; cursor: pointer; color: var(--ink-2); border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .pestanas button.activo { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
 .pestana-ayuda { margin: 8px 0 0; color: var(--muted); font-size: 12.5px; }
