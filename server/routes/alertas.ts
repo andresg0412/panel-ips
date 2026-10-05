@@ -44,7 +44,7 @@ async function revisadas(): Promise<Map<string, { por: string; at: string }>> {
 
 /** Alertas activas con su clave, su enlace y si ya se revisaron. */
 export async function alertasConEstado() {
-  const [activas, rev] = await Promise.all([conCache('alertas', alertasActivas, 60_000), revisadas()]);
+  const [activas, rev] = await Promise.all([conCache('alertas', alertasActivas, 60_000, 0), revisadas()]);
   return activas.map((a) => {
     const clave = claveAlerta(a);
     return { ...a, clave, enlace: ENLACE_ALERTA[a.alerta] ?? '#/alertas', revisada: rev.get(clave) ?? null };

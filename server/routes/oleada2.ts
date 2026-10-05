@@ -43,17 +43,31 @@ export default async function rutasOleada2(app: FastifyInstance) {
     conCache(claveCache(req), async () => {
       const hoy = hoyBogota();
       const fin = sumarDias(hoy, 27);
+      // Cada fuente se agrupa por semana en una sola pasada y se une por igualdad: las subconsultas por semana
+      // recorrían `citas` y `capacidad` una vez por cada semana y columna. Las semanas son lunes desde la de $1
+      // hasta la que contiene $2; 364 días = 52 semanas, así que "hace un año" también cae en lunes.
       const filas = await query(
         `WITH ${CITAS}, ${capacidad('$1', '$2')},
-         sem AS (SELECT generate_series(date_trunc('week', $1::date), $2::date, interval '1 week')::date AS semana)
+         sem AS (SELECT generate_series(date_trunc('week', $1::date), $2::date, interval '1 week')::date AS semana),
+         prog AS (SELECT date_trunc('week', fecha_cita)::date AS semana, count(*) AS n FROM citas
+                   WHERE es_cita_paciente AND grupo = 'Programada'
+                     AND fecha_cita >= date_trunc('week', $1::date)::date AND fecha_cita < date_trunc('week', $2::date)::date + 7
+                   GROUP BY 1),
+         capw AS (SELECT date_trunc('week', fecha)::date AS semana, sum(cupos) AS cupos, sum(ocupan) AS ocupan FROM capacidad GROUP BY 1),
+         ant AS (SELECT date_trunc('week', fecha_cita)::date + 364 AS semana, count(*) AS n FROM citas
+                  WHERE es_cita_paciente AND grupo IN ('Asistió', 'No asistió', 'Sin cierre')
+                    AND fecha_cita >= date_trunc('week', $1::date)::date - 364 AND fecha_cita < date_trunc('week', $2::date)::date + 7 - 364
+                  GROUP BY 1)
          SELECT sem.semana,
-                (SELECT count(*) FROM citas c WHERE c.es_cita_paciente AND c.grupo = 'Programada'
-                   AND date_trunc('week', c.fecha_cita)::date = sem.semana) AS programadas,
-                (SELECT coalesce(sum(cupos), 0) FROM capacidad k WHERE date_trunc('week', k.fecha)::date = sem.semana) AS capacidad_medible,
-                (SELECT coalesce(sum(ocupan), 0) FROM capacidad k WHERE date_trunc('week', k.fecha)::date = sem.semana) AS ocupan_medible,
-                (SELECT count(*) FROM citas c WHERE c.es_cita_paciente AND c.grupo IN ('Asistió', 'No asistió', 'Sin cierre')
-                   AND date_trunc('week', c.fecha_cita)::date = (sem.semana - 364)) AS hace_un_ano
-           FROM sem ORDER BY 1`,
+                coalesce(prog.n, 0) AS programadas,
+                coalesce(capw.cupos, 0) AS capacidad_medible,
+                coalesce(capw.ocupan, 0) AS ocupan_medible,
+                coalesce(ant.n, 0) AS hace_un_ano
+           FROM sem
+           LEFT JOIN prog USING (semana)
+           LEFT JOIN capw USING (semana)
+           LEFT JOIN ant USING (semana)
+          ORDER BY 1`,
         [hoy, fin],
       );
       return { filas };

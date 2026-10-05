@@ -41,7 +41,7 @@ const consulta = (cerradas: boolean) => `
            count(*) FILTER (WHERE grupo IN ('Asistió', 'No asistió')) OVER w AS cerradas_previas
       FROM citas
      WHERE es_cita_paciente AND paciente_id IS NOT NULL
-    WINDOW w AS (PARTITION BY paciente_id ORDER BY fecha_cita, hora_cita ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)
+    WINDOW w AS (PARTITION BY paciente_id ORDER BY fecha_cita, hora_cita, agenda_id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)
   ),
   ${contacto('$1', '$2')}
   SELECT h.agenda_id, h.fecha_cita, to_char(h.hora_cita, 'HH24:MI') AS hora_cita, h.hora, h.dia, h.modalidad, h.tipo_servicio,

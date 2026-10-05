@@ -41,8 +41,16 @@ const RANGOS_AGENDA =
  * - periodo_confiable: false si la cita cae en un incidente de agenda o 15 días antes
  *   (la ventana hacia atrás del scraper no alcanzó a cerrar esas citas).
  * Uso: `WITH ${CITAS} SELECT ... FROM citas WHERE es_cita_paciente AND ...`
+ *
+ * Rendimiento (medido en producción, 2026-10-05):
+ * - NOT MATERIALIZED: si una consulta usa `citas` varias veces, Postgres guardaría la CTE completa (todas las
+ *   columnas de todas las citas) antes de filtrar: ~3,5 s en Capacidad o Pacientes. Así cada uso recibe su
+ *   propio filtro por fecha, id o profesional.
+ * - cat_norm en un LATERAL con OFFSET 0: si fuera una columna de la subconsulta, Postgres la reemplazaría
+ *   por la expresión en cada LIKE de es_cita_paciente y tipo_servicio (~15 veces por cita). Así se calcula
+ *   una vez por fila.
  */
-export const CITAS = `citas AS (
+export const CITAS = `citas AS NOT MATERIALIZED (
   SELECT b.*,
     CASE
       WHEN estado_agenda = 'Asistio' THEN 'Asistió'
@@ -86,10 +94,10 @@ export const CITAS = `citas AS (
       WHERE b.fecha_cita BETWEEN i.desde - 15 AND i.hasta
     ) AS periodo_confiable
   FROM (
-    SELECT c.*,
-      upper(translate(coalesce(c.catalogo, ''), 'ÁÉÍÓÚáéíóú', 'AEIOUAEIOU')) AS cat_norm,
+    SELECT c.*, n.cat_norm,
       regexp_replace(trim(coalesce(c.profesional, '')), '\\s+', ' ', 'g') AS profesional_nombre
     FROM bi.fact_citas c
+    CROSS JOIN LATERAL (SELECT upper(translate(coalesce(c.catalogo, ''), 'ÁÉÍÓÚáéíóú', 'AEIOUAEIOU')) AS cat_norm OFFSET 0) n
   ) b
 )`;
 

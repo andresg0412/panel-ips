@@ -16,8 +16,8 @@ const RETENCION = `
   atenc AS (
     SELECT paciente_id, fecha_cita, profesional_nombre,
            fecha_cita AS primera,
-           lead(fecha_cita) OVER (PARTITION BY paciente_id ORDER BY fecha_cita, hora_cita) AS segunda,
-           row_number() OVER (PARTITION BY paciente_id ORDER BY fecha_cita, hora_cita) AS orden
+           lead(fecha_cita) OVER (PARTITION BY paciente_id ORDER BY fecha_cita, hora_cita, agenda_id) AS segunda,
+           row_number() OVER (PARTITION BY paciente_id ORDER BY fecha_cita, hora_cita, agenda_id) AS orden
       FROM citas
      WHERE es_cita_paciente AND grupo = 'Asistió' AND paciente_id IS NOT NULL
   ),

@@ -26,6 +26,7 @@ export default async function rutasSoporte(app: FastifyInstance) {
         return r;
       },
       30_000,
+      0, // sin gracia: el contador de alertas no debe mostrarse vencido
     ),
   );
 

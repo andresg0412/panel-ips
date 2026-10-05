@@ -93,14 +93,17 @@ async function semanas(hasta: string, baseP: Promise<Base>) {
   const SEM = `s AS (SELECT generate_series(date_trunc('week', $1::date) - interval '7 weeks', date_trunc('week', $1::date), interval '1 week')::date AS semana)`;
   const [citas, bot] = await Promise.all([
     query<{ semana: string; asistio: number; no_asistio: number; total: number; no_ocurrieron: number }>(
-      `WITH ${CITAS}, ${SEM}
+      // Cada cita se etiqueta con su semana en una sola pasada y se une por igualdad (un JOIN por rango de fechas
+      // recorrería `citas` una vez por semana).
+      `WITH ${CITAS}, ${SEM},
+       c AS (SELECT date_trunc('week', fecha_cita)::date AS semana, grupo FROM citas
+              WHERE es_cita_paciente AND fecha_cita >= date_trunc('week', $1::date) - interval '7 weeks' AND fecha_cita <= $1)
        SELECT s.semana::text AS semana,
-              count(c.*) FILTER (WHERE c.grupo = 'Asistió') AS asistio,
-              count(c.*) FILTER (WHERE c.grupo = 'No asistió') AS no_asistio,
-              count(c.*) AS total,
-              count(c.*) FILTER (WHERE c.grupo IN ('Cancelada', 'Reprogramada')) AS no_ocurrieron
-         FROM s LEFT JOIN citas c
-           ON c.es_cita_paciente AND c.fecha_cita >= s.semana AND c.fecha_cita < s.semana + 7 AND c.fecha_cita <= $1
+              count(c.semana) FILTER (WHERE c.grupo = 'Asistió') AS asistio,
+              count(c.semana) FILTER (WHERE c.grupo = 'No asistió') AS no_asistio,
+              count(c.semana) AS total,
+              count(c.semana) FILTER (WHERE c.grupo IN ('Cancelada', 'Reprogramada')) AS no_ocurrieron
+         FROM s LEFT JOIN c USING (semana)
         GROUP BY 1 ORDER BY 1`,
       [hasta],
     ),

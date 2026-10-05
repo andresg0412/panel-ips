@@ -43,6 +43,7 @@ export default async function rutasSistema(app: FastifyInstance) {
         return { actividad, campanas, erroresEnvio, erroresBot };
       },
       30_000,
+      0, // sin gracia: es el estado del sistema en vivo, no debe mostrarse vencido
     );
   });
 }
