@@ -13,6 +13,9 @@ import rutasListaEspera from './routes/listaEspera.js';
 import rutasPacientes from './routes/pacientes.js';
 import rutasSistema from './routes/sistema.js';
 import rutasProfesionales from './routes/profesionales.js';
+import rutasAlertas from './routes/alertas.js';
+import rutasCampanas2 from './routes/campanas2.js';
+import rutasOleada2 from './routes/oleada2.js';
 import { INCIDENTES } from './incidentes.js';
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, trustProxy: true });
@@ -52,6 +55,9 @@ await app.register(rutasListaEspera);
 await app.register(rutasPacientes);
 await app.register(rutasSistema);
 await app.register(rutasProfesionales);
+await app.register(rutasAlertas);
+await app.register(rutasCampanas2);
+await app.register(rutasOleada2);
 
 // Incidentes de datos conocidos (TR-01): el frontend los sombrea en los gráficos de tiempo.
 app.get('/api/incidentes', async () => ({ incidentes: INCIDENTES }));

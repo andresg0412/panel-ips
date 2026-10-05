@@ -1,7 +1,6 @@
 import { createContext, useContext, useMemo, useState } from 'react';
 import type { Rango } from './api';
 import type { Sombra } from './components/series';
-import { fecha } from './format';
 
 // Incidentes de datos conocidos (TR-01). Los entrega /api/incidentes; aquí se reparten a las pantallas.
 export type Area = 'general' | 'agenda' | 'whatsapp' | 'conversaciones' | 'eventos' | 'trazabilidad';
@@ -40,51 +39,11 @@ export function useSombras(areas: Area[]): Sombra[] {
 const DIA = 86_400_000;
 const dias = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / DIA) + 1;
 
-/** Días del rango [desde, hasta] que caen en algún incidente. */
-function diasEnIncidente(desde: string, hasta: string, inc: Incidente[]): number {
-  let n = 0;
-  for (let t = Date.parse(desde); t <= Date.parse(hasta); t += DIA) {
-    const d = new Date(t).toISOString().slice(0, 10);
-    if (inc.some((i) => d >= i.desde && d <= i.hasta)) n++;
-  }
-  return n;
-}
-
 export function rangoAnterior(r: Rango): Rango {
   const n = dias(r.desde, r.hasta);
   const fin = new Date(Date.parse(r.desde) - DIA).toISOString().slice(0, 10);
   const ini = new Date(Date.parse(fin) - (n - 1) * DIA).toISOString().slice(0, 10);
   return { desde: ini, hasta: fin };
-}
-
-/**
- * Aviso cuando el período elegido, o el período anterior con el que se compara, cae en un incidente.
- * Si más del 30 % del período anterior está en incidente, la comparación "vs período anterior" no es confiable.
- */
-export function AvisoIncidentes({ rango, areas, compara = true }: { rango: Rango; areas: Area[]; compara?: boolean }) {
-  const inc = useIncidentes(areas);
-  if (!inc.length) return null;
-  const enActual = inc.filter((i) => i.desde <= rango.hasta && i.hasta >= rango.desde);
-  const prev = rangoAnterior(rango);
-  const fraccionPrev = diasEnIncidente(prev.desde, prev.hasta, inc) / dias(prev.desde, prev.hasta);
-  const mensajes: JSX.Element[] = [];
-  if (enActual.length) {
-    mensajes.push(
-      <div key="a">
-        <b>Datos incompletos en este período.</b>{' '}
-        {enActual.map((i) => `${i.titulo} (${fecha(i.desde)} al ${fecha(i.hasta)})`).join('; ')}. Esos días aparecen sombreados en los gráficos.
-      </div>,
-    );
-  }
-  if (compara && fraccionPrev > 0.3) {
-    mensajes.push(
-      <div key="p">
-        <b>La comparación con el período anterior no es confiable:</b> el {Math.round(fraccionPrev * 100)} % de ese período cae en un incidente.
-      </div>,
-    );
-  }
-  if (!mensajes.length) return null;
-  return <div className="aviso-incidente">{mensajes}</div>;
 }
 
 export function Pestanas<T extends string>({ opciones, valor, onCambio }: { opciones: [T, string][]; valor: T; onCambio: (v: T) => void }) {
@@ -115,4 +74,15 @@ export function usePestana<T extends string>(validas: T[], defecto: T): [T, (v: 
     setValor(v);
   };
   return [valor, cambiar];
+}
+
+/** Últimos `n` meses completos (YYYY-MM) que no se cruzan con un incidente: base de los promedios "por mes". */
+export function useMesesConfiables(): (meses: string[], n?: number) => string[] {
+  const todos = useContext(IncidentesCtx);
+  return (meses, n = 3) => {
+    const hoyMes = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date()).slice(0, 7);
+    const inc = todos.filter((i) => i.area !== 'trazabilidad');
+    const toca = (m: string) => inc.some((i) => i.desde.slice(0, 7) <= m && i.hasta.slice(0, 7) >= m);
+    return meses.filter((m) => m < hoyMes && !toca(m)).sort().slice(-n);
+  };
 }

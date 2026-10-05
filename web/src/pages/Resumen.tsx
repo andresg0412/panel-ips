@@ -3,12 +3,23 @@ import { conRango, useApi, type Rango } from '../api';
 import Grafico from '../components/Grafico';
 import { barrasApiladas, lineas, pequenosMultiplos, pivotar } from '../components/series';
 import { Estado, Kpi, ListaConteo, Tarjeta } from '../components/ui';
-import { AvisoIncidentes, useSombras } from '../incidentes';
+import { useSombras } from '../incidentes';
+import { METAS } from '../metas';
 import { num, ratio, tasaTxt } from '../format';
 
 type N = Record<string, number>;
 interface Indicadores { citas: N; envios: N; sesiones: N; listaEspera: N }
-interface DatosResumen { actual: Indicadores; anterior: Indicadores }
+interface DatosResumen {
+  actual: Indicadores;
+  anterior: Indicadores | null;
+  comparacion: { tipo: 'anterior' | 'interanual' | 'ninguna'; desde: string | null; hasta: string | null };
+}
+interface Metas {
+  nuevos: { nuevos: number };
+  confirmadas: { citas: number; confirmadas: number };
+  ocupacion: { cupos: number; ocupan: number };
+  capacidadDesde: string;
+}
 interface DatosSeries {
   rango: { grano: string };
   citas: { periodo: string; grupo: string | null; n: number }[];
@@ -29,6 +40,7 @@ export default function Resumen({ rango }: { rango: Rango }) {
   const r = useApi<DatosResumen>(conRango('/api/resumen', rango), 120_000);
   const s = useApi<DatosSeries>(conRango('/api/resumen/series', rango), 120_000);
   const t = useApi<Tendencia>('/api/resumen/tendencia');
+  const m = useApi<Metas>(conRango('/api/resumen/metas', rango), 300_000);
   const incAgenda = useSombras(['agenda']);
   const incWhatsapp = useSombras(['whatsapp', 'trazabilidad']);
   const incConv = useSombras(['conversaciones']);
@@ -57,24 +69,39 @@ export default function Resumen({ rango }: { rango: Rango }) {
   }, [t.data, incAgenda]);
 
   const a = r.data?.actual;
-  const p = r.data?.anterior;
+  // Si el período anterior cae en un incidente, el servidor compara con el mismo período del año anterior,
+  // o no compara (p queda vacío y los KPI se muestran sin variación).
+  const p = r.data?.anterior ?? undefined;
+  const comp = r.data?.comparacion.tipo === 'interanual' ? 'vs mismo período del año anterior' : 'vs período anterior';
+  const md = m.data;
+  const ocupacion = md && md.ocupacion.cupos ? md.ocupacion.ocupan / md.ocupacion.cupos : null;
+  const confWhatsapp = md && md.confirmadas.citas ? md.confirmadas.confirmadas / md.confirmadas.citas : null;
   // RES-03: trámites que el bot resolvió sin intervención humana.
   const tramites = a ? a.envios.confirmaron + a.sesiones.citas_creadas + a.sesiones.citas_canceladas + a.sesiones.citas_reprogramadas : 0;
 
   return (
     <>
-      <AvisoIncidentes rango={rango} areas={['agenda', 'whatsapp', 'conversaciones']} />
       <Estado cargando={r.cargando} error={r.error} hayDatos={!!a} />
-      {a && p && (
+      {a && (
         <div className="kpis">
-          <Kpi etiqueta="Citas atendidas" actual={a.citas.asistio} anterior={p.citas.asistio} />
-          <Kpi etiqueta="Tasa de asistencia" formato="pct" actual={asistencia(a.citas)} anterior={asistencia(p.citas)} />
-          <Kpi etiqueta="Citas que no ocurrieron" formato="pct" actual={noOcurrio(a.citas)} anterior={noOcurrio(p.citas)} mejorSiSube={false} />
-          <Kpi etiqueta="Citas nuevas registradas" actual={a.citas.registradas} anterior={p.citas.registradas} />
-          <Kpi etiqueta="Mensajes de campaña enviados" actual={a.envios.enviados} anterior={p.envios.enviados} />
-          <Kpi etiqueta="Respondieron a los mensajes" formato="pct" actual={respuesta(a.envios)} anterior={respuesta(p.envios)} />
-          <Kpi etiqueta="Citas confirmadas por WhatsApp" actual={a.envios.confirmaron} anterior={p.envios.confirmaron} />
-          <Kpi etiqueta="Conversaciones con el bot" actual={a.sesiones.total} anterior={p.sesiones.total} />
+          <Kpi etiqueta="Citas atendidas" actual={a.citas.asistio} anterior={p?.citas.asistio} comparacion={comp} />
+          <Kpi etiqueta="Tasa de asistencia" formato="pct" actual={asistencia(a.citas)} anterior={p ? asistencia(p.citas) : undefined} comparacion={comp} meta={{ valor: METAS.asistencia }} />
+          <Kpi
+            etiqueta="Citas que no ocurrieron"
+            formato="pct"
+            actual={noOcurrio(a.citas)}
+            anterior={p ? noOcurrio(p.citas) : undefined}
+            mejorSiSube={false}
+            comparacion={comp}
+            meta={{ valor: METAS.noOcurrieron, mejorSiSube: false }}
+          />
+          <Kpi etiqueta="Ocupación de la agenda" formato="pct" actual={ocupacion} meta={{ valor: METAS.ocupacion }} />
+          <Kpi etiqueta="Citas confirmadas por WhatsApp" formato="pct" actual={confWhatsapp} meta={{ valor: METAS.confirmadasWhatsapp }} />
+          <Kpi etiqueta="Pacientes nuevos atendidos" actual={md ? md.nuevos.nuevos : null} />
+          <Kpi etiqueta="Citas nuevas registradas" actual={a.citas.registradas} anterior={p?.citas.registradas} comparacion={comp} />
+          <Kpi etiqueta="Mensajes de campaña enviados" actual={a.envios.enviados} anterior={p?.envios.enviados} comparacion={comp} />
+          <Kpi etiqueta="Respondieron a los mensajes" formato="pct" actual={respuesta(a.envios)} anterior={p ? respuesta(p.envios) : undefined} comparacion={comp} />
+          <Kpi etiqueta="Conversaciones con el bot" actual={a.sesiones.total} anterior={p?.sesiones.total} comparacion={comp} />
         </div>
       )}
 

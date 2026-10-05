@@ -3,7 +3,7 @@ import { conRango, useApi, type Rango } from '../api';
 import Grafico, { base, token } from '../components/Grafico';
 import { barrasApiladas, ranking } from '../components/series';
 import { Estado, Kpi, Tarjeta } from '../components/ui';
-import { useSombras } from '../incidentes';
+import { useMesesConfiables, useSombras } from '../incidentes';
 import { etiqueta, num } from '../format';
 
 interface Panorama {
@@ -69,7 +69,9 @@ export default function PacientesPanorama({ rango }: { rango: Rango }) {
   const optEspecialidad = useCallback(perfil('especialidad'), [data]);
   /* eslint-enable react-hooks/exhaustive-deps */
 
-  const ultimos = mensual.slice(-4, -1); // últimos 3 meses completos
+  // Promedio de los últimos 3 meses completos que no caen en un incidente.
+  const confiables = useMesesConfiables()(mensual.map((m) => m.mes));
+  const ultimos = mensual.filter((m) => confiables.includes(m.mes));
   const promNuevos = ultimos.length ? Math.round(ultimos.reduce((s, m) => s + m.nuevos, 0) / ultimos.length) : null;
   const atendidos = data?.perfil.filter((p) => p.dimension === 'pago').reduce((s, p) => s + p.n, 0) ?? 0;
   const ri = data?.resumenIntervalos;
@@ -81,7 +83,7 @@ export default function PacientesPanorama({ rango }: { rango: Rango }) {
         <>
           <div className="kpis">
             <Kpi etiqueta="Pacientes atendidos en el período" actual={atendidos} />
-            <Kpi etiqueta="Pacientes nuevos por mes (prom. 3 meses)" actual={promNuevos} />
+            <Kpi etiqueta="Pacientes nuevos por mes (promedio reciente)" actual={promNuevos} />
             <Kpi etiqueta="Días típicos entre citas" valor={`${Math.round(ri.mediana)} días`} actual={null} />
             <Kpi etiqueta="La mitad vuelve entre" valor={`${Math.round(ri.p25)} y ${Math.round(ri.p75)} días`} actual={null} />
           </div>

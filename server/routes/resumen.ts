@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { conCache } from '../cache.js';
-import { leerRango } from '../params.js';
+import { leerRango, sumarDias } from '../params.js';
+import { INCIDENTES } from '../incidentes.js';
 import { CITAS, MESES, PERIODOS, periodo } from '../sql.js';
 
 // Conversación fuera del horario de recepción: antes de las 7, desde las 19 o en domingo.
@@ -68,12 +69,44 @@ async function indicadores(desde: string, hasta: string) {
   return { citas, envios, sesiones, listaEspera };
 }
 
+/** Fracción de días del rango que cae en un incidente que afecta a las métricas del resumen. */
+function fraccionEnIncidente(desde: string, hasta: string): number {
+  const inc = INCIDENTES.filter((i) => i.area !== 'trazabilidad');
+  let total = 0;
+  let malos = 0;
+  for (let d = desde; d <= hasta; d = sumarDias(d, 1)) {
+    total++;
+    if (inc.some((i) => d >= i.desde && d <= i.hasta)) malos++;
+  }
+  return total ? malos / total : 0;
+}
+
+const INICIO_DATOS = '2025-08-01';
+
+/**
+ * Con qué se compara el período (TR-01): el período anterior si es confiable; si más del 30 % cae en un
+ * incidente, el mismo período del año anterior (misma semana, 364 días antes); si tampoco sirve, no se compara.
+ */
+function periodoComparacion(r: { desde: string; hasta: string; prevDesde: string; prevHasta: string }) {
+  if (r.prevDesde >= INICIO_DATOS && fraccionEnIncidente(r.prevDesde, r.prevHasta) <= 0.3) {
+    return { tipo: 'anterior' as const, desde: r.prevDesde, hasta: r.prevHasta };
+  }
+  const desde = sumarDias(r.desde, -364);
+  const hasta = sumarDias(r.hasta, -364);
+  if (desde >= INICIO_DATOS && fraccionEnIncidente(desde, hasta) <= 0.3) return { tipo: 'interanual' as const, desde, hasta };
+  return { tipo: 'ninguna' as const, desde: null, hasta: null };
+}
+
 export default async function rutasResumen(app: FastifyInstance) {
   app.get('/api/resumen', async (req) => {
     const r = leerRango(req.query as Record<string, unknown>);
     return conCache(req.url, async () => {
-      const [actual, anterior] = await Promise.all([indicadores(r.desde, r.hasta), indicadores(r.prevDesde, r.prevHasta)]);
-      return { rango: r, actual, anterior };
+      const comp = periodoComparacion(r);
+      const [actual, anterior] = await Promise.all([
+        indicadores(r.desde, r.hasta),
+        comp.desde && comp.hasta ? indicadores(comp.desde, comp.hasta) : Promise.resolve(null),
+      ]);
+      return { rango: r, actual, anterior, comparacion: comp };
     });
   });
 

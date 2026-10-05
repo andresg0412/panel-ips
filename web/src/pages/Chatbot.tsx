@@ -4,7 +4,8 @@ import Grafico, { base, token } from '../components/Grafico';
 import { barrasApiladas, ranking } from '../components/series';
 import { Estado, Kpi, Tabla, Tarjeta, type Columna } from '../components/ui';
 import { DIAS, etiqueta, fecha, num, pct } from '../format';
-import { AvisoIncidentes, useSombras } from '../incidentes';
+import { useSombras } from '../incidentes';
+import { DemandaChatbot } from './ChatbotDemanda';
 
 type Conteo = { clave: string; n: number };
 interface Datos {
@@ -88,7 +89,6 @@ export default function Chatbot({ rango }: { rango: Rango }) {
 
   return (
     <>
-      <AvisoIncidentes rango={rango} areas={['conversaciones']} compara={false} />
       <Estado cargando={cargando} error={error} hayDatos={!!data} />
       {data && k && (
         <>
@@ -140,6 +140,7 @@ export default function Chatbot({ rango }: { rango: Rango }) {
           </Tarjeta>
         </>
       )}
+      <DemandaChatbot rango={rango} />
       <Tarjeta
         titulo="Recorrido paso a paso"
         ayuda={embudo.data?.datosDesde ? `Dónde se quedan los pacientes dentro de un trámite. Datos detallados desde el ${fecha(embudo.data.datosDesde)}.` : 'Dónde se quedan los pacientes dentro de un trámite.'}

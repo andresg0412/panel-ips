@@ -3,7 +3,8 @@ import { conRango, useApi, type Rango } from '../api';
 import Grafico from '../components/Grafico';
 import { barrasApiladas, barrasTasa, ranking } from '../components/series';
 import { Estado, Kpi, Tabla, Tarjeta, type Columna } from '../components/ui';
-import { AvisoIncidentes, useSombras } from '../incidentes';
+import { useSombras } from '../incidentes';
+import OcupacionProfesionales from './Ocupacion';
 import { DIAS, etiqueta, num, pct, ratio } from '../format';
 
 interface FilaProfesional {
@@ -92,7 +93,7 @@ export default function Profesionales({ rango }: { rango: Rango }) {
 
   return (
     <>
-      <AvisoIncidentes rango={rango} areas={['agenda']} compara={false} />
+      <OcupacionProfesionales rango={rango} />
       <Tarjeta
         titulo="Profesionales"
         ayuda={

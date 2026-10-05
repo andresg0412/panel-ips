@@ -106,9 +106,6 @@ export default function ListaEspera({ rango }: { rango: Rango }) {
 
   return (
     <>
-      <div className="aviso">
-        La lista de espera funciona desde el 30 de septiembre de 2026. Cuando una cita se cancela, el sistema ofrece ese cupo a pacientes inscritos que tienen una cita más lejana.
-      </div>
       <Estado cargando={cargando} error={error} hayDatos={!!data} />
       {data && (
         <>
@@ -123,7 +120,7 @@ export default function ListaEspera({ rango }: { rango: Rango }) {
           <div className="grid g2">
             <Tarjeta
               titulo="De cupo liberado a cita atendida"
-              ayuda={data.embudo.cupos < 20 ? 'Fase inicial: con tan pocos cupos los porcentajes todavía no son representativos.' : 'Porcentaje de cada etapa sobre la anterior.'}
+              ayuda={`Cuando una cita se cancela, el sistema ofrece ese cupo a pacientes inscritos con una cita más lejana (funciona desde el 30 sep 2026). ${data.embudo.cupos < 20 ? 'Con tan pocos cupos, los porcentajes todavía no son representativos.' : 'Porcentaje de cada etapa sobre la anterior.'}`}
             >
               {data.embudo.cupos ? <Grafico opcion={optEmbudo} alto={230} /> : <p className="ayuda">Sin cupos liberados en este período.</p>}
             </Tarjeta>

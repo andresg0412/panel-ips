@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useApi, type Rango } from '../api';
 import { Pestanas, usePestana } from '../incidentes';
 import PacientesPanorama from './PacientesPanorama';
+import PacientesRetencion from './PacientesRetencion';
 import { Estado, Tabla, Tarjeta, type Columna } from '../components/ui';
 import { etiqueta, fecha, fechaHora, hora } from '../format';
 
@@ -57,18 +58,21 @@ const CAMPOS: [string, string][] = [
 ];
 
 export default function Pacientes({ rango }: { rango: Rango }) {
-  const [vista, setVista] = usePestana<'panorama' | 'buscar'>(['panorama', 'buscar'], 'panorama');
+  const [vista, setVista] = usePestana<'panorama' | 'retencion' | 'buscar'>(['panorama', 'retencion', 'buscar'], 'panorama');
   return (
     <>
       <Pestanas
         opciones={[
           ['panorama', 'Panorama'],
+          ['retencion', 'Retención y actividad'],
           ['buscar', 'Buscar un paciente'],
         ]}
         valor={vista}
         onCambio={setVista}
       />
-      {vista === 'panorama' ? <PacientesPanorama rango={rango} /> : <BuscarPaciente />}
+      {vista === 'panorama' && <PacientesPanorama rango={rango} />}
+      {vista === 'retencion' && <PacientesRetencion />}
+      {vista === 'buscar' && <BuscarPaciente />}
     </>
   );
 }

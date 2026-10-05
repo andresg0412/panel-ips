@@ -2,7 +2,8 @@ import { useCallback, useMemo, useState } from 'react';
 import { conRango, getJson, useApi, type Rango } from '../api';
 import Grafico from '../components/Grafico';
 import { barrasApiladas, lineas, pivotar } from '../components/series';
-import { AvisoIncidentes, useSombras } from '../incidentes';
+import { Pestanas, usePestana, useSombras } from '../incidentes';
+import CampanasEfecto, { CalendarioEjecuciones } from './CampanasEfecto';
 import { descargarCsv, Estado, Tabla, Tarjeta, type Columna } from '../components/ui';
 import { etiqueta, fecha, fechaHora, hora, num, pct, ratio, tasaTxt } from '../format';
 
@@ -126,7 +127,7 @@ const COLS_ENVIO: Columna<Envio>[] = [
 
 const TAM = 50;
 
-export default function Campanas({ rango }: { rango: Rango }) {
+function CampanasResultados({ rango }: { rango: Rango }) {
   const { data, error, cargando } = useApi<Datos>(conRango('/api/campanas', rango), 60_000);
   const tiempos = useApi<Tiempos>(conRango('/api/campanas/tiempos', rango), 120_000);
   const calidad = useApi<Calidad>(conRango('/api/campanas/calidad', rango), 300_000);
@@ -201,16 +202,15 @@ export default function Campanas({ rango }: { rango: Rango }) {
 
   return (
     <>
-      <AvisoIncidentes rango={rango} areas={['whatsapp', 'trazabilidad']} compara={false} />
       <Estado cargando={cargando} error={error} hayDatos={!!data} />
       {data && (
         <>
-          {data.entregaDesde && (
-            <div className="aviso">
-              WhatsApp informa si un mensaje fue entregado o leído solo desde el {fecha(data.entregaDesde)}. Antes de esa fecha solo se sabe si el envío fue aceptado.
-            </div>
-          )}
-          <Tarjeta titulo="Resultados por campaña" ayuda="Confirmaron/cancelaron: el paciente cambió el estado de su cita después de recibir el mensaje.">
+          <Tarjeta
+            titulo="Resultados por campaña"
+            ayuda={`Confirmaron: respondieron "confirmo" o la cita pasó a confirmada después del mensaje. ${
+              data.entregaDesde ? `Entregados y leídos se conocen desde el ${fecha(data.entregaDesde)}.` : ''
+            }`}
+          >
             <Tabla filas={data.porCampana} columnas={COLS_CAMPANA} nombreCsv={`campanas_${rango.desde}_${rango.hasta}`} />
           </Tarjeta>
           <Tarjeta titulo="Mensajes enviados por campaña">
@@ -313,6 +313,35 @@ export default function Campanas({ rango }: { rango: Rango }) {
           </>
         )}
       </Tarjeta>
+    </>
+  );
+}
+
+type VistaCampanas = 'resultados' | 'efecto' | 'ejecuciones';
+
+export default function Campanas({ rango }: { rango: Rango }) {
+  const [vista, setVista] = usePestana<VistaCampanas>(['resultados', 'efecto', 'ejecuciones'], 'resultados');
+  return (
+    <>
+      <Pestanas<VistaCampanas>
+        opciones={[
+          ['resultados', 'Resultados'],
+          ['efecto', 'Efecto en las citas'],
+          ['ejecuciones', 'Ejecuciones'],
+        ]}
+        valor={vista}
+        onCambio={setVista}
+      />
+      {vista === 'resultados' && <CampanasResultados rango={rango} />}
+      {vista === 'efecto' && <CampanasEfecto rango={rango} />}
+      {vista === 'ejecuciones' && (
+        <Tarjeta
+          titulo="Ejecuciones de las campañas"
+          ayuda="Cada cuadro es una campaña en un día (últimos 35 días del período). Pase el cursor para ver cuántas citas procesó y cuántos mensajes envió."
+        >
+          <CalendarioEjecuciones rango={rango} />
+        </Tarjeta>
+      )}
     </>
   );
 }

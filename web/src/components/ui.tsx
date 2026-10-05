@@ -19,13 +19,17 @@ export function Tarjeta({ titulo, ayuda, children, accion }: { titulo: string; a
  * Indicador con comparación contra el período anterior.
  * `mejorSiSube=false` para métricas donde subir es malo (cancelaciones, abandono).
  */
-export function Kpi({ etiqueta, valor, actual, anterior, mejorSiSube = true, formato = 'num' }: {
+export function Kpi({ etiqueta, valor, actual, anterior, mejorSiSube = true, formato = 'num', comparacion = 'vs período anterior', meta }: {
   etiqueta: string;
   valor?: string;
   actual: number | null;
   anterior?: number | null;
   mejorSiSube?: boolean;
   formato?: 'num' | 'pct';
+  /** Texto de la comparación, p. ej. 'vs mismo período de 2025'. */
+  comparacion?: string;
+  /** Meta: muestra un indicador (✓ cumple / ! cerca / ✕ lejos). Para pct, en proporción (0,92). */
+  meta?: { valor: number; mejorSiSube?: boolean };
 }) {
   const mostrar = valor ?? (actual === null ? '—' : formato === 'pct' ? `${(actual * 100).toFixed(1).replace('.', ',')} %` : num(actual));
   let delta: ReactNode = <span className="delta">&nbsp;</span>;
@@ -35,7 +39,7 @@ export function Kpi({ etiqueta, valor, actual, anterior, mejorSiSube = true, for
       const clase = Math.abs(pp) < 0.05 ? '' : (pp > 0) === mejorSiSube ? 'up' : 'down';
       delta = (
         <span className={`delta ${clase}`}>
-          {pp > 0 ? '▲' : pp < 0 ? '▼' : '='} {Math.abs(pp).toFixed(1).replace('.', ',')} pts vs período anterior
+          {pp > 0 ? '▲' : pp < 0 ? '▼' : '='} {Math.abs(pp).toFixed(1).replace('.', ',')} pts {comparacion}
         </span>
       );
     } else if (anterior > 0) {
@@ -43,18 +47,33 @@ export function Kpi({ etiqueta, valor, actual, anterior, mejorSiSube = true, for
       const clase = Math.abs(cambio) < 0.005 ? '' : (cambio > 0) === mejorSiSube ? 'up' : 'down';
       delta = (
         <span className={`delta ${clase}`}>
-          {cambio > 0 ? '▲' : cambio < 0 ? '▼' : '='} {Math.abs(cambio * 100).toFixed(0)} % vs período anterior ({num(anterior)})
+          {cambio > 0 ? '▲' : cambio < 0 ? '▼' : '='} {Math.abs(cambio * 100).toFixed(0)} % {comparacion} ({num(anterior)})
         </span>
       );
     } else {
       delta = <span className="delta">0 en el período anterior</span>;
     }
   }
+  let indicadorMeta: ReactNode = null;
+  if (meta && actual !== null) {
+    const sube = meta.mejorSiSube ?? true;
+    const cumple = sube ? actual >= meta.valor : actual <= meta.valor;
+    const cerca = Math.abs(actual - meta.valor) <= Math.abs(meta.valor) * 0.05;
+    const [color, simbolo, texto] = cumple ? ['var(--good)', '✓', 'Cumple'] : cerca ? ['var(--warning)', '!', 'Cerca'] : ['var(--critical)', '✕', 'Por debajo'];
+    const metaTxt = formato === 'pct' ? `${(meta.valor * 100).toFixed(0)} %` : num(meta.valor);
+    indicadorMeta = (
+      <span className="delta" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span className="punto" style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block' }} />
+        {simbolo} {texto} la meta ({sube ? '≥' : '≤'} {metaTxt})
+      </span>
+    );
+  }
   return (
     <div className="kpi">
       <div className="etiqueta">{etiqueta}</div>
       <div className="valor">{mostrar}</div>
       {delta}
+      {indicadorMeta}
     </div>
   );
 }

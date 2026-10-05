@@ -19,3 +19,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA bi GRANT SELECT ON TABLES TO panel_lectura;
 GRANT USAGE ON SCHEMA public TO panel_lectura;
 GRANT SELECT ON lista_espera, cupos_liberados, ofertas_cupo,
                 invitaciones_lista_espera, ejecuciones_invitacion_lista_espera TO panel_lectura;
+
+-- Oleada 2 (2026-10-04): ocupación de agenda (horarios vigentes) y ejecuciones de campañas
+-- (filas resumen EJECUCION_* que bi.fact_eventos excluye; el resto del contenido ya es visible en bi).
+GRANT SELECT ON horariosequipo, chat_stats TO panel_lectura;

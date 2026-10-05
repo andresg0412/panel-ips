@@ -206,11 +206,12 @@ tr:hover td { background: var(--surface-2); }
 .pestanas { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
 .pestanas button { border: 0; background: none; padding: 8px 12px; cursor: pointer; color: var(--ink-2); border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .pestanas button.activo { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
-.aviso-incidente { background: color-mix(in srgb, var(--warning) 14%, var(--surface)); border-radius: 8px; padding: 10px 12px; color: var(--ink-2); font-size: 13px; margin-bottom: 16px; }
-.aviso-incidente b { color: var(--ink); }
 .frase { font-size: 15px; color: var(--ink-2); margin: 0 0 12px; }
 .frase b { color: var(--ink); }
 .cifras { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 .cifra .n { font-size: 24px; font-weight: 650; }
 .cifra .t { color: var(--ink-2); font-size: 12.5px; }
 .nota { color: var(--muted); font-size: 12px; margin-top: 8px; }
+
+/* Número de alertas activas en el menú */
+.insignia { display: inline-block; min-width: 18px; padding: 0 6px; margin-left: 8px; border-radius: 9px; background: var(--critical); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }

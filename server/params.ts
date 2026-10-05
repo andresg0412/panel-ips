@@ -15,11 +15,11 @@ export interface Rango {
   grano: 'day' | 'week';
 }
 
-function hoyBogota(): string {
+export function hoyBogota(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
 }
 
-function sumarDias(fecha: string, dias: number): string {
+export function sumarDias(fecha: string, dias: number): string {
   return new Date(Date.parse(`${fecha}T00:00:00Z`) + dias * DIA_MS).toISOString().slice(0, 10);
 }
 

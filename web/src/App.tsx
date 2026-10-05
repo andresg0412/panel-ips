@@ -7,7 +7,8 @@ import Agenda from './pages/Agenda';
 import Chatbot from './pages/Chatbot';
 import ListaEspera from './pages/ListaEspera';
 import Pacientes from './pages/Pacientes';
-import Sistema from './pages/Sistema';
+import Alertas from './pages/Alertas';
+import Marketing from './pages/Marketing';
 import Profesionales from './pages/Profesionales';
 import { IncidentesCtx, type Incidente } from './incidentes';
 import { fecha } from './format';
@@ -20,7 +21,8 @@ const PAGINAS = [
   { ruta: 'chatbot', titulo: 'Chatbot', desc: 'Conversaciones con el asistente de WhatsApp', Comp: Chatbot, conRango: true },
   { ruta: 'lista-espera', titulo: 'Lista de espera', desc: 'Inscripciones, cupos liberados y ofertas', Comp: ListaEspera, conRango: true },
   { ruta: 'pacientes', titulo: 'Pacientes', desc: 'Quiénes son, cuántos llegan y cada cuánto vuelven', Comp: Pacientes, conRango: true },
-  { ruta: 'sistema', titulo: 'Estado del sistema', desc: '¿Está funcionando todo?', Comp: Sistema, conRango: false },
+  { ruta: 'marketing', titulo: 'Marketing', desc: 'Alcance de WhatsApp y pacientes para invitar a volver', Comp: Marketing, conRango: false },
+  { ruta: 'alertas', titulo: 'Alertas', desc: 'Lo que requiere atención y la salud de los datos', Comp: Alertas, conRango: true },
 ] as const;
 
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -52,7 +54,8 @@ function guardarAlmacen(clave: string, valor: string) {
  */
 function leerUrl(): Estado {
   const [rutaCruda, query = ''] = location.hash.replace(/^#\/?/, '').split('?');
-  const ruta = PAGINAS.some((p) => p.ruta === rutaCruda) ? rutaCruda : 'resumen';
+  const destino = rutaCruda === 'sistema' ? 'alertas' : rutaCruda;
+  const ruta = PAGINAS.some((p) => p.ruta === destino) ? destino : 'resumen';
   const q = new URLSearchParams(query);
   const desde = q.get('desde');
   const hasta = q.get('hasta');
@@ -86,6 +89,7 @@ export default function App() {
   const [horaDatos, setHoraDatos] = useState(horaActual);
   const yo = useApi<{ usuario: string | null }>('/api/yo');
   const incidentes = useApi<{ incidentes: Incidente[] }>('/api/incidentes');
+  const alertas = useApi<{ n: number }>('/api/alertas/conteo', 60_000);
 
   useEffect(() => {
     const fn = () => setEstado(leerUrl());
@@ -140,7 +144,12 @@ export default function App() {
           <h1>Centro de Orientación</h1>
           <p className="sub">Panel de reportes</p>
           {PAGINAS.map((p) => (
-            <a key={p.ruta} href={`#/${p.ruta}${sufijo}`} className={p.ruta === estado.ruta ? 'activo' : ''}>{p.titulo}</a>
+            <a key={p.ruta} href={`#/${p.ruta}${sufijo}`} className={p.ruta === estado.ruta ? 'activo' : ''}>
+              {p.titulo}
+              {p.ruta === 'alertas' && (alertas.data?.n ?? 0) > 0 && (
+                <span className="insignia" title={`${alertas.data!.n} alertas activas`}>{alertas.data!.n}</span>
+              )}
+            </a>
           ))}
           <div className="pie">
             <label>

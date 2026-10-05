@@ -4,7 +4,8 @@ import Grafico from '../components/Grafico';
 import { barrasApiladas, pivotar, ranking } from '../components/series';
 import { Estado, Kpi, ListaConteo, Tabla, Tarjeta, type Columna } from '../components/ui';
 import { DIAS, etiqueta, fecha, fechaHora, hora, pct } from '../format';
-import { AvisoIncidentes, Pestanas, usePestana, useSombras } from '../incidentes';
+import { Pestanas, usePestana, useSombras } from '../incidentes';
+import { AgendaProximas, AnticipacionCancelaciones } from './Ocupacion';
 import { AgendaCalidad, AgendaInasistencia, AgendaTendencias } from './AgendaAnalisis';
 
 interface PorEstado {
@@ -91,15 +92,16 @@ const COLS_CAMBIO: Columna<Cambio>[] = [
   { clave: 'origen', titulo: 'Origen', formato: etiqueta, csv: etiqueta },
 ];
 
-type Vista = 'periodo' | 'inasistencia' | 'tendencias' | 'calidad';
+type Vista = 'periodo' | 'proximas' | 'inasistencia' | 'tendencias' | 'calidad';
 
 export default function Agenda({ rango }: { rango: Rango }) {
-  const [vista, setVista] = usePestana<Vista>(['periodo', 'inasistencia', 'tendencias', 'calidad'], 'periodo');
+  const [vista, setVista] = usePestana<Vista>(['periodo', 'proximas', 'inasistencia', 'tendencias', 'calidad'], 'periodo');
   return (
     <>
       <Pestanas<Vista>
         opciones={[
           ['periodo', 'Período'],
+          ['proximas', 'Próximas semanas'],
           ['inasistencia', 'Inasistencia'],
           ['tendencias', 'Tendencias'],
           ['calidad', 'Calidad de los datos'],
@@ -107,8 +109,8 @@ export default function Agenda({ rango }: { rango: Rango }) {
         valor={vista}
         onCambio={setVista}
       />
-      <AvisoIncidentes rango={rango} areas={['agenda']} compara={false} />
       {vista === 'periodo' && <AgendaPeriodo rango={rango} />}
+      {vista === 'proximas' && <AgendaProximas />}
       {vista === 'inasistencia' && <AgendaInasistencia rango={rango} />}
       {vista === 'tendencias' && <AgendaTendencias />}
       {vista === 'calidad' && <AgendaCalidad />}
@@ -186,6 +188,7 @@ function AgendaPeriodo({ rango }: { rango: Rango }) {
               <ListaConteo items={data.origenCancelacion.map((o) => ({ clave: o.origen, etiqueta: etiqueta(o.origen), n: o.n }))} total={totalCanceladas} />
             </Tarjeta>
           </div>
+          <AnticipacionCancelaciones rango={rango} />
           <Tarjeta titulo="Últimos cambios de estado" ayuda="Registro disponible desde fines de septiembre de 2026.">
             <Tabla filas={data.cambios} columnas={COLS_CAMBIO} nombreCsv="cambios_estado" vacio="Sin cambios registrados en este período" />
           </Tarjeta>
