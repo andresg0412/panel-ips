@@ -280,6 +280,7 @@ export function rangoPreset(clave: string): Rango {
   const hoy = hoyBogota();
   const [a, m] = hoy.split('-').map(Number);
   switch (clave) {
+    case 'hoy': return { desde: hoy, hasta: hoy };
     case '7d': return { desde: menosDias(hoy, 6), hasta: hoy };
     case '90d': return { desde: menosDias(hoy, 89), hasta: hoy };
     case 'mes': return { desde: `${hoy.slice(0, 8)}01`, hasta: hoy };
@@ -296,6 +297,7 @@ export function rangoPreset(clave: string): Rango {
 }
 
 const PRESETS: [string, string][] = [
+  ['hoy', 'Hoy'],
   ['7d', '7 días'],
   ['30d', '30 días'],
   ['90d', '90 días'],

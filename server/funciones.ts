@@ -14,22 +14,22 @@ export const HISTORIAL_DIAS: Record<Nivel, number | null> = { basico: 90, interm
 export const MAX_USUARIOS: Record<Nivel, number | null> = { basico: 1, intermedio: 4, full: null };
 
 export type Pagina =
-  | 'resumen' | 'campanas' | 'agenda' | 'profesionales' | 'chatbot' | 'lista-espera' | 'pacientes' | 'marketing'
-  | 'alertas' | 'plan' | 'soporte';
+  | 'resumen' | 'campanas' | 'agenda' | 'capacidad' | 'profesionales' | 'chatbot' | 'lista-espera' | 'pacientes' | 'marketing'
+  | 'alertas' | 'plan' | 'mi-agenda' | 'soporte';
 
 export type Rol = 'direccion' | 'operacion' | 'analista' | 'relacion' | 'profesional' | 'soporte';
 export const esRol = (v: unknown): v is Rol => typeof v === 'string' && v in ROLES;
 
-const CLIENTE: Pagina[] = ['resumen', 'campanas', 'agenda', 'profesionales', 'chatbot', 'lista-espera', 'pacientes', 'marketing', 'alertas', 'plan'];
+const CLIENTE: Pagina[] = ['resumen', 'campanas', 'agenda', 'capacidad', 'profesionales', 'chatbot', 'lista-espera', 'pacientes', 'marketing', 'alertas', 'plan'];
 
 export const ROLES: Record<Rol, { nombre: string; inicio: Pagina; paginas: Pagina[] }> = {
   direccion: { nombre: 'Dirección', inicio: 'resumen', paginas: CLIENTE },
   analista: { nombre: 'Analista', inicio: 'resumen', paginas: CLIENTE },
-  operacion: { nombre: 'Operación', inicio: 'agenda', paginas: ['agenda', 'profesionales', 'lista-espera', 'alertas'] },
+  operacion: { nombre: 'Operación', inicio: 'agenda', paginas: ['agenda', 'capacidad', 'profesionales', 'lista-espera', 'alertas'] },
   relacion: { nombre: 'Relación con pacientes', inicio: 'campanas', paginas: ['campanas', 'chatbot', 'pacientes', 'marketing', 'alertas'] },
-  // "Mi agenda" (solo sus datos) llega en la Etapa 4; mientras tanto, el profesional ve solo agregados generales.
-  profesional: { nombre: 'Profesional', inicio: 'resumen', paginas: ['resumen'] },
-  soporte: { nombre: 'Soporte', inicio: 'soporte', paginas: [...CLIENTE, 'soporte'] },
+  // "Mi agenda": solo los datos del profesional vinculado al usuario (Etapa 4), más los agregados generales.
+  profesional: { nombre: 'Profesional', inicio: 'mi-agenda', paginas: ['mi-agenda', 'resumen'] },
+  soporte: { nombre: 'Soporte', inicio: 'soporte', paginas: [...CLIENTE, 'mi-agenda', 'soporte'] },
 };
 
 export interface Funcion {
@@ -61,6 +61,18 @@ export const FUNCIONES: Funcion[] = [
   { clave: 'agenda.tendencias', pagina: 'agenda', nivel: 'intermedio', titulo: 'Tendencias: cancelación, teleconsulta, convenios y días de espera' },
   { clave: 'agenda.calidad', pagina: 'agenda', nivel: 'intermedio', titulo: 'Calidad de los datos de la agenda' },
   { clave: 'agenda.proximas', pagina: 'agenda', nivel: 'full', titulo: 'Proyección de las próximas semanas' },
+
+  { clave: 'capacidad.cancelaciones', pagina: 'capacidad', nivel: 'intermedio', titulo: 'Cupos que se liberan por cancelaciones y reprogramaciones' },
+  { clave: 'capacidad.modalidad', pagina: 'capacidad', nivel: 'intermedio', titulo: 'Presencial frente a virtual' },
+  {
+    clave: 'capacidad.centro',
+    pagina: 'capacidad',
+    nivel: 'full',
+    titulo: 'Centro de capacidad: cupos ofrecidos y ocupados, capacidad sin usar por día y hora, y días de espera',
+  },
+  { clave: 'capacidad.recuperables', pagina: 'capacidad', nivel: 'full', titulo: 'Citas recuperables con la lista de espera' },
+
+  { clave: 'miagenda.ver', pagina: 'mi-agenda', nivel: 'intermedio', titulo: 'Mi agenda: citas, pacientes que faltan y ocupación de cada profesional' },
 
   { clave: 'profesionales.lista', pagina: 'profesionales', nivel: 'basico', titulo: 'Citas y asistencia por profesional' },
   { clave: 'profesionales.ficha', pagina: 'profesionales', nivel: 'intermedio', titulo: 'Ficha detallada de cada profesional' },
@@ -136,6 +148,12 @@ export const ENDPOINTS: Record<string, string> = {
   'GET /api/agenda/calidad': 'agenda.calidad',
   'GET /api/agenda/proximas': 'agenda.proximas',
 
+  'GET /api/capacidad': 'capacidad.centro',
+  'GET /api/capacidad/recuperables': 'capacidad.recuperables',
+  'GET /api/capacidad/cancelaciones': 'capacidad.cancelaciones',
+  'GET /api/capacidad/modalidad': 'capacidad.modalidad',
+  'GET /api/mi-agenda': 'miagenda.ver',
+
   'GET /api/profesionales': 'profesionales.lista',
   'GET /api/profesionales/ficha': 'profesionales.ficha',
   'GET /api/profesionales/ocupacion': 'profesionales.ocupacion',
@@ -188,7 +206,6 @@ export const TAM_MAX_SIN_EXPORTAR = 100;
 
 /** Funcionalidades del plan Full que todavía no existen (se muestran como "en desarrollo" en Mi plan). */
 export const PROXIMAMENTE: { titulo: string; nivel: Nivel }[] = [
-  { titulo: 'Centro de capacidad de la agenda y cupos recuperables', nivel: 'full' },
   { titulo: 'Informe ejecutivo mensual en PDF', nivel: 'full' },
   { titulo: 'Resumen semanal por correo', nivel: 'full' },
   { titulo: 'Predicción de inasistencia y detección de anomalías', nivel: 'full' },

@@ -10,6 +10,8 @@ import Pacientes from './pages/Pacientes';
 import Alertas from './pages/Alertas';
 import Marketing from './pages/Marketing';
 import Profesionales from './pages/Profesionales';
+import Capacidad from './pages/Capacidad';
+import MiAgenda from './pages/MiAgenda';
 import MiPlan from './pages/MiPlan';
 import Soporte from './pages/Soporte';
 import { IncidentesCtx, type Incidente } from './incidentes';
@@ -32,6 +34,8 @@ const PAGINAS: Pagina[] = [
   { ruta: 'resumen', titulo: 'Resumen', desc: 'Lo más importante del período', Comp: Resumen, conRango: true, funcion: 'resumen.kpis' },
   { ruta: 'campanas', titulo: 'Campañas', desc: 'Mensajes automáticos de WhatsApp y sus resultados', Comp: Campanas, conRango: true, funcion: 'campanas.resultados' },
   { ruta: 'agenda', titulo: 'Agenda', desc: 'Citas por estado, profesional y especialidad', Comp: Agenda, conRango: true, funcion: 'agenda.periodo' },
+  { ruta: 'capacidad', titulo: 'Capacidad', desc: 'Dónde sobra y dónde falta agenda, cuánto se espera y qué se puede recuperar', Comp: Capacidad, conRango: true, funcion: 'capacidad.centro' },
+  { ruta: 'mi-agenda', titulo: 'Mi agenda', desc: 'Sus próximas citas, sus pacientes y su horario', Comp: MiAgenda, conRango: true, funcion: 'miagenda.ver' },
   { ruta: 'profesionales', titulo: 'Profesionales', desc: 'Agenda, asistencia y continuidad de cada profesional', Comp: Profesionales, conRango: true, funcion: 'profesionales.lista' },
   { ruta: 'chatbot', titulo: 'Chatbot', desc: 'Conversaciones con el asistente de WhatsApp', Comp: Chatbot, conRango: true, funcion: 'chatbot.conversaciones' },
   { ruta: 'lista-espera', titulo: 'Lista de espera', desc: 'Inscripciones, cupos liberados y ofertas', Comp: ListaEspera, conRango: true, funcion: 'listaEspera.inscritos' },
@@ -133,13 +137,13 @@ export default function App() {
 /** Grupos del menú (Etapa 2). Cada persona ve solo las pantallas de su rol; los grupos vacíos no se muestran. */
 const GRUPOS: { clave: string; titulo: string; paginas: string[] }[] = [
   { clave: 'direccion', titulo: 'Dirección', paginas: ['resumen'] },
-  { clave: 'operacion', titulo: 'Operación', paginas: ['agenda', 'profesionales', 'lista-espera', 'alertas'] },
+  { clave: 'operacion', titulo: 'Operación', paginas: ['mi-agenda', 'agenda', 'capacidad', 'profesionales', 'lista-espera', 'alertas'] },
   { clave: 'relacion', titulo: 'Relación con pacientes', paginas: ['campanas', 'chatbot', 'pacientes', 'marketing'] },
   { clave: 'cuenta', titulo: 'Su cuenta', paginas: ['plan', 'soporte'] },
 ];
 
 /** Vista por defecto según el rol: decide qué grupo va primero en el menú. */
-const VISTA_ROL: Record<string, string> = { direccion: 'direccion', analista: 'direccion', operacion: 'operacion', relacion: 'relacion', profesional: 'direccion', soporte: 'direccion' };
+const VISTA_ROL: Record<string, string> = { direccion: 'direccion', analista: 'direccion', operacion: 'operacion', relacion: 'relacion', profesional: 'operacion', soporte: 'direccion' };
 
 function haceCuanto(ms: number): string {
   const min = Math.floor((Date.now() - ms) / 60_000);

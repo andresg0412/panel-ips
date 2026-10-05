@@ -20,6 +20,7 @@ export default async function rutasPlan(app: FastifyInstance) {
       historialDesde: ctx.historialDesde,
       habilitado: ctx.habilitado,
       mensaje: ctx.mensaje,
+      profesional: ctx.profesional,
       inicio: rol ? (ctx.rolReal === 'soporte' && !ctx.vistaPrevia ? 'soporte' : ROLES[rol].inicio) : null,
       paginas: ctx.habilitado ? estadoPaginas(ctx) : {},
       funciones: Object.fromEntries(FUNCIONES.map((f) => [f.clave, ctx.habilitado ? evaluar(ctx, f.clave) : { ok: false, motivo: 'rol', nivel: f.nivel }])),

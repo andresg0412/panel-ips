@@ -17,7 +17,9 @@ const rango = (n: Nivel) => ORDEN.indexOf(n);
 const SECCIONES: [string | null, string][] = [
   ['resumen', 'Resumen'],
   ['agenda', 'Agenda'],
+  ['capacidad', 'Capacidad'],
   ['profesionales', 'Profesionales'],
+  ['mi-agenda', 'Mi agenda (profesionales)'],
   ['campanas', 'Campañas'],
   ['chatbot', 'Chatbot'],
   ['pacientes', 'Pacientes'],

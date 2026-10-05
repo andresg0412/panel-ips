@@ -47,7 +47,7 @@ const hastaCerrado = (r: Rango) => (r.hasta < ayer() ? r.hasta : ayer());
 
 // ------------------------------------------------------------------------------- datos de base
 /** Clave de agrupación de una especialidad: el maestro tiene variantes ("Psicologia Clinica" / "Psicología Clínica"). */
-const normalizar = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+export const normalizar = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 
 /**
  * Consultas pesadas que comparten la tendencia y las frases, una sola vez cada una:

@@ -24,6 +24,8 @@ export interface UsuarioPanel {
   correo: string | null;
   prioridad: number;
   activo: boolean;
+  /** Profesional de la agenda al que corresponde el usuario (rol Profesional, "Mi agenda"). */
+  profesional: string | null;
 }
 
 interface Config {
@@ -46,6 +48,8 @@ export interface Contexto {
   historialDesde: string | null;
   habilitado: boolean;
   mensaje: string | null;
+  /** Profesional vinculado al usuario (nunca viene del navegador). */
+  profesional: string | null;
 }
 
 declare module 'fastify' {
@@ -63,7 +67,7 @@ async function leerConfig(): Promise<Config> {
     `SELECT nivel, contacto_whatsapp, nota, to_char(actualizado_at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD"T"HH24:MI:SS') AS actualizado_at, actualizado_por FROM panel.licencia WHERE id = 1`,
   );
   if (!lic || !esNivel(lic.nivel)) throw new Error('panel.licencia vacía o inválida');
-  const filas = await queryApp<UsuarioPanel>(`SELECT usuario, rol, nombre, correo, prioridad, activo FROM panel.usuarios`);
+  const filas = await queryApp<UsuarioPanel>(`SELECT usuario, rol, nombre, correo, prioridad, activo, profesional FROM panel.usuarios`);
   const usuarios = new Map(filas.filter((u) => esRol(u.rol)).map((u) => [u.usuario, u]));
   const max = MAX_USUARIOS[lic.nivel];
   const orden = [...usuarios.values()]
@@ -125,7 +129,7 @@ export async function resolverContexto(req: FastifyRequest): Promise<Contexto> {
   const usuario = usuarioDe(req);
   const u: UsuarioPanel | undefined =
     MODO_LEGADO && usuario
-      ? { usuario, rol: 'direccion', nombre: null, correo: null, prioridad: 1, activo: true }
+      ? { usuario, rol: 'direccion', nombre: null, correo: null, prioridad: 1, activo: true, profesional: null }
       : usuario
         ? cfg.usuarios.get(usuario)
         : undefined;
@@ -171,6 +175,7 @@ export async function resolverContexto(req: FastifyRequest): Promise<Contexto> {
     historialDesde: sinLimite ? null : historialDesde(nivel),
     habilitado,
     mensaje,
+    profesional: u?.profesional ?? null,
   };
 }
 

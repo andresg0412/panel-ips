@@ -60,7 +60,7 @@ const rutas = [
   './routes/plan.js', './routes/resumen.js', './routes/campanas.js', './routes/agenda.js', './routes/chatbot.js',
   './routes/listaEspera.js', './routes/pacientes.js', './routes/sistema.js', './routes/profesionales.js',
   './routes/alertas.js', './routes/campanas2.js', './routes/oleada2.js', './routes/soporte.js', './routes/sala.js',
-  './routes/historias.js',
+  './routes/historias.js', './routes/capacidad.js',
 ];
 for (const r of rutas) await app.register((await import(r)).default);
 

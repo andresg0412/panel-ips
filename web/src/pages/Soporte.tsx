@@ -348,6 +348,7 @@ interface UsuarioFila {
   correo: string | null;
   prioridad: number;
   activo: boolean;
+  profesional: string | null;
   enPlan: boolean;
   ultimo: string | null;
   visitas_7d: number;
@@ -355,10 +356,13 @@ interface UsuarioFila {
   exportaciones_30d: number;
 }
 
-function FilaUsuario({ u, roles, onGuardado }: { u: UsuarioFila; roles: Record<string, string>; onGuardado: () => void }) {
-  const [f, setF] = useState({ rol: u.rol, nombre: u.nombre ?? '', correo: u.correo ?? '', prioridad: u.prioridad, activo: u.activo });
+function FilaUsuario({ u, roles, profesionales, onGuardado }: { u: UsuarioFila; roles: Record<string, string>; profesionales: string[]; onGuardado: () => void }) {
+  const [f, setF] = useState({ rol: u.rol, nombre: u.nombre ?? '', correo: u.correo ?? '', prioridad: u.prioridad, activo: u.activo, profesional: u.profesional ?? '' });
   const [msg, setMsg] = useState<string | null>(null);
-  const cambiado = f.rol !== u.rol || f.nombre !== (u.nombre ?? '') || f.correo !== (u.correo ?? '') || f.prioridad !== u.prioridad || f.activo !== u.activo;
+  const cambiado =
+    f.rol !== u.rol || f.nombre !== (u.nombre ?? '') || f.correo !== (u.correo ?? '') || f.prioridad !== u.prioridad || f.activo !== u.activo || f.profesional !== (u.profesional ?? '');
+  // El vínculo con un profesional de la agenda solo tiene efecto en el rol Profesional ("Mi agenda").
+  const opciones = f.profesional && !profesionales.includes(f.profesional) ? [f.profesional, ...profesionales] : profesionales;
   const guardar = async () => {
     setMsg(null);
     try {
@@ -379,6 +383,16 @@ function FilaUsuario({ u, roles, onGuardado }: { u: UsuarioFila; roles: Record<s
       <td><input className="boton" style={{ width: 130 }} value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} /></td>
       <td><input className="boton" style={{ width: 190 }} value={f.correo} onChange={(e) => setF({ ...f, correo: e.target.value })} /></td>
       <td className="num"><input className="boton" type="number" min={0} max={999} style={{ width: 64 }} value={f.prioridad} onChange={(e) => setF({ ...f, prioridad: Number(e.target.value) })} /></td>
+      <td>
+        {f.rol === 'profesional' ? (
+          <select className="boton" style={{ maxWidth: 210 }} value={f.profesional} onChange={(e) => setF({ ...f, profesional: e.target.value })} aria-label="Profesional de la agenda">
+            <option value="">Sin vincular</option>
+            {opciones.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        ) : (
+          <span className="nota">—</span>
+        )}
+      </td>
       <td><input type="checkbox" checked={f.activo} onChange={(e) => setF({ ...f, activo: e.target.checked })} aria-label="Activo" /></td>
       <td>{u.enPlan ? <span style={{ color: 'var(--up)' }}>Sí</span> : <span style={{ color: 'var(--down)' }} title="El plan no alcanza para este usuario (ver prioridad)">No</span>}</td>
       <td>{u.ultimo ? fechaHora(u.ultimo) : '—'}</td>
@@ -391,6 +405,8 @@ function FilaUsuario({ u, roles, onGuardado }: { u: UsuarioFila; roles: Record<s
 
 function Usuarios() {
   const { data, error, cargando, recargar } = useApi<{ filas: UsuarioFila[]; maxUsuarios: number | null }>('/api/soporte/usuarios');
+  const profs = useApi<{ filas: { nombre: string }[] }>('/api/soporte/profesionales');
+  const profesionales = (profs.data?.filas ?? []).map((p) => p.nombre);
   const { yo } = useAcceso();
   const roles = yo?.roles ?? {};
   const [nuevo, setNuevo] = useState({ usuario: '', rol: 'analista' });
@@ -418,12 +434,12 @@ function Usuarios() {
               <table>
                 <thead>
                   <tr>
-                    <th>Usuario</th><th>Rol</th><th>Nombre</th><th>Correo</th><th className="num">Prioridad</th><th>Activo</th><th>En el plan</th>
+                    <th>Usuario</th><th>Rol</th><th>Nombre</th><th>Correo</th><th className="num">Prioridad</th><th>Profesional (Mi agenda)</th><th>Activo</th><th>En el plan</th>
                     <th>Último acceso</th><th className="num">Pantallas 7 d</th><th className="num">Descargas 30 d</th><th />
                   </tr>
                 </thead>
                 <tbody>
-                  {data.filas.map((u) => <FilaUsuario key={`${u.usuario}-${u.rol}-${u.prioridad}-${u.activo}`} u={u} roles={roles} onGuardado={recargar} />)}
+                  {data.filas.map((u) => <FilaUsuario key={`${u.usuario}-${u.rol}-${u.prioridad}-${u.activo}-${u.profesional ?? ''}`} u={u} roles={roles} profesionales={profesionales} onGuardado={recargar} />)}
                 </tbody>
               </table>
             </div>

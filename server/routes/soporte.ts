@@ -175,32 +175,41 @@ export default async function rutasSoporte(app: FastifyInstance) {
             correo: { type: 'string', maxLength: 150 },
             prioridad: { type: 'integer', minimum: 0, maximum: 999 },
             activo: { type: 'boolean' },
+            // '' quita el vínculo.
+            profesional: { type: 'string', maxLength: 120 },
           },
         },
       },
     },
     async (req) => {
       const { usuario } = req.params as { usuario: string };
-      const b = req.body as { rol: string; nombre?: string; correo?: string; prioridad?: number; activo?: boolean };
+      const b = req.body as { rol: string; nombre?: string; correo?: string; prioridad?: number; activo?: boolean; profesional?: string };
       if (!esRol(b.rol)) throw new ErrorParametro('Rol inválido');
       // Evita quedarse sin acceso a la consola.
       if (usuario === req.contexto!.usuario && (b.rol !== 'soporte' || b.activo === false)) {
         throw new ErrorParametro('No puede quitarse a sí mismo el rol de soporte');
       }
       const [fila] = await queryApp(
-        `INSERT INTO panel.usuarios (usuario, rol, nombre, correo, prioridad, activo)
-         VALUES ($1, $2, nullif($3, ''), nullif($4, ''), coalesce($5, 100), coalesce($6, true))
+        `INSERT INTO panel.usuarios (usuario, rol, nombre, correo, prioridad, activo, profesional)
+         VALUES ($1, $2, nullif($3, ''), nullif($4, ''), coalesce($5, 100), coalesce($6, true), nullif($7, ''))
          ON CONFLICT (usuario) DO UPDATE
             SET rol = EXCLUDED.rol,
                 nombre = CASE WHEN $3::text IS NULL THEN panel.usuarios.nombre ELSE EXCLUDED.nombre END,
                 correo = CASE WHEN $4::text IS NULL THEN panel.usuarios.correo ELSE EXCLUDED.correo END,
                 prioridad = coalesce($5, panel.usuarios.prioridad),
                 activo = coalesce($6, panel.usuarios.activo),
+                profesional = CASE WHEN $7::text IS NULL THEN panel.usuarios.profesional ELSE EXCLUDED.profesional END,
                 actualizado_at = now()
-         RETURNING usuario, rol, nombre, correo, prioridad, activo`,
-        [usuario, b.rol, b.nombre ?? null, b.correo ?? null, b.prioridad ?? null, b.activo ?? null],
+         RETURNING usuario, rol, nombre, correo, prioridad, activo, profesional`,
+        [usuario, b.rol, b.nombre ?? null, b.correo ?? null, b.prioridad ?? null, b.activo ?? null, b.profesional === undefined ? null : b.profesional.trim()],
       );
-      registrarActividad(req.contexto, { tipo: 'configuracion', ruta: 'usuario', detalle: `${usuario}: ${b.rol}${b.activo === false ? ' (desactivado)' : ''}`, status: 200, ms: null });
+      registrarActividad(req.contexto, {
+        tipo: 'configuracion',
+        ruta: 'usuario',
+        detalle: `${usuario}: ${b.rol}${b.activo === false ? ' (desactivado)' : ''}${b.profesional ? ` · profesional ${b.profesional.trim()}` : ''}`,
+        status: 200,
+        ms: null,
+      });
       invalidarConfig();
       return fila;
     },

@@ -11,7 +11,8 @@ pg.types.setTypeParser(pg.types.builtins.TIMESTAMP, (v) => v.replace(' ', 'T').s
 // El rol panel_lectura además tiene CONNECTION LIMIT 5, read-only y statement_timeout propios.
 export const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
-  max: 3,
+  // PANEL_DB_POOL=1 para un panel local por túnel: el rol tiene CONNECTION LIMIT 5, compartido con producción.
+  max: Number(process.env.PANEL_DB_POOL) || 3,
   idleTimeoutMillis: 30_000,
   // Con pool de 3, las peticiones esperan turno: un dashboard dispara ~15 consultas a la vez.
   connectionTimeoutMillis: 30_000,

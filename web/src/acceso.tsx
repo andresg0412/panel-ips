@@ -23,6 +23,8 @@ export interface Yo {
   historialDesde: string | null;
   habilitado: boolean;
   mensaje: string | null;
+  /** Profesional de la agenda vinculado al usuario ("Mi agenda"). */
+  profesional: string | null;
   inicio: string | null;
   paginas: Record<string, { estado: 'ok' | 'bloqueada' | 'oculta'; nivel: Nivel }>;
   funciones: Record<string, Evaluacion>;

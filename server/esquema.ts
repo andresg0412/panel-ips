@@ -130,6 +130,11 @@ const MIGRACIONES: { nombre: string; sql: string }[] = [
       );
     `,
   },
+  {
+    // Etapa 4: "Mi agenda". Nombre del profesional en la agenda (como lo escribe Globho) al que corresponde el usuario.
+    nombre: '004_usuario_profesional',
+    sql: `ALTER TABLE panel.usuarios ADD COLUMN profesional text;`,
+  },
 ];
 
 /** Configuración inicial (solo si no existe): nivel Full y los usuarios que ya tiene nginx, con su rol. */

@@ -48,27 +48,34 @@ export const contacto = (desde: string, hasta: string) => `
   )`;
 
 /**
+ * Profesionales que hoy atienden y cuyas citas están enlazadas a su identificador: al menos 5 citas (atendidas, no
+ * asistidas o programadas) entre 30 días atrás y 30 adelante. Sin esto, su ocupación saldría en 0 % y sus cupos
+ * aparecerían libres aunque no esté trabajando. Requiere la CTE `citas`.
+ */
+const ENLAZADOS = `
+  SELECT profesional_id FROM citas
+   WHERE es_cita_paciente AND profesional_id IS NOT NULL AND grupo IN ('Asistió', 'No asistió', 'Programada')
+     AND fecha_cita BETWEEN ${HOY} - 30 AND ${HOY} + 30
+   GROUP BY 1 HAVING count(*) >= 5`;
+
+/** Lista de horas del horario de un día de la semana (`dia` = isodow), sin espacios ni vacíos. */
+const horasDelDia = (dia: string) => `array_remove(string_to_array(replace(coalesce(
+  CASE ${dia}
+    WHEN 1 THEN h.lunes WHEN 2 THEN h.martes WHEN 3 THEN h.miercoles WHEN 4 THEN h.jueves
+    WHEN 5 THEN h.viernes WHEN 6 THEN h.sabado ELSE h.domingo
+  END, ''), ' ', ''), ','), '')`;
+
+/**
  * CTE `capacidad` (PRO-01, PRO-03, AGE-09): cupos ofrecidos por profesional y día según el horario
  * vigente, sin festivos, y su uso. El horario termina en coma ("07:00,...,15:10,"): se descartan los vacíos.
  */
 export const capacidad = (desde: string, hasta: string) => `
   cap AS (
     SELECT h.profesionalid AS profesional_id, p.nombre_completo AS profesional, p.especialidad, f.fecha,
-           cardinality(array_remove(string_to_array(replace(coalesce(
-             CASE f.dia_semana_iso
-               WHEN 1 THEN h.lunes WHEN 2 THEN h.martes WHEN 3 THEN h.miercoles WHEN 4 THEN h.jueves
-               WHEN 5 THEN h.viernes WHEN 6 THEN h.sabado ELSE h.domingo
-             END, ''), ' ', ''), ','), '')) AS cupos
+           cardinality(${horasDelDia('f.dia_semana_iso')}) AS cupos
       FROM horariosequipo h
       JOIN bi.dim_profesional p ON p.profesional_id = h.profesionalid AND p.estado = 'Activo'
-      -- Solo profesionales que hoy atienden y cuyas citas están enlazadas a su identificador: al menos 5 citas
-      -- (atendidas, no asistidas o programadas) en los últimos 30 días. Si no, su ocupación saldría en 0 %
-      -- y sus cupos aparecerían libres aunque no esté trabajando.
-      JOIN (SELECT profesional_id FROM citas
-             WHERE es_cita_paciente AND profesional_id IS NOT NULL AND grupo IN ('Asistió', 'No asistió', 'Programada')
-               AND fecha_cita BETWEEN ${HOY} - 30 AND ${HOY} + 30
-             GROUP BY 1 HAVING count(*) >= 5) en
-        ON en.profesional_id = h.profesionalid
+      JOIN (${ENLAZADOS}) en ON en.profesional_id = h.profesionalid
       JOIN bi.dim_fecha f ON NOT f.es_festivo
        AND f.fecha BETWEEN greatest(${desde}::date, DATE '${CAPACIDAD_DESDE}') AND ${hasta}::date
   ),
@@ -89,6 +96,41 @@ export const capacidad = (desde: string, hasta: string) => `
            greatest(cap.cupos - coalesce(u.ocupan, 0) - coalesce(u.administrativas, 0), 0) AS libres
       FROM cap LEFT JOIN uso u ON u.profesional_id = cap.profesional_id AND u.fecha = cap.fecha
      WHERE cap.cupos > 0
+  )`;
+
+/**
+ * CTE `slots` (Etapa 4, centro de capacidad): un cupo del horario por fila (profesional, fecha, hora de inicio) y si
+ * una cita lo ocupó. Los cupos son de 50 minutos y coinciden con la hora de la cita; una cita de dos cupos (p. ej.
+ * terapia de pareja) ocupa todos los que empiezan entre su hora de inicio y su hora final. Mismos profesionales y días
+ * que `capacidad`.
+ */
+export const slots = (desde: string, hasta: string) => `
+  slots_base AS (
+    SELECT h.profesionalid AS profesional_id, p.nombre_completo AS profesional, p.especialidad, f.fecha,
+           f.dia_semana_iso AS dia, t.hora::time AS hora
+      FROM horariosequipo h
+      JOIN bi.dim_profesional p ON p.profesional_id = h.profesionalid AND p.estado = 'Activo'
+      JOIN (${ENLAZADOS}) en ON en.profesional_id = h.profesionalid
+      JOIN bi.dim_fecha f ON NOT f.es_festivo
+       AND f.fecha BETWEEN greatest(${desde}::date, DATE '${CAPACIDAD_DESDE}') AND ${hasta}::date
+     CROSS JOIN LATERAL unnest(${horasDelDia('f.dia_semana_iso')}) AS t(hora)
+  ),
+  -- Cada cita se expande en marcas de 10 minutos (todas las horas del horario caen en múltiplos de 10). Un cupo está
+  -- ocupado si su hora de inicio coincide con una marca: la búsqueda es por conjunto (hash), no un recorrido por cupo.
+  slots_oc AS (
+    SELECT c.profesional_id, c.fecha_cita, t::time AS hora
+      FROM citas c,
+           generate_series(date_bin('10 minutes', c.fecha_cita + c.hora_cita, TIMESTAMP '2000-01-01'),
+                           c.fecha_cita + coalesce(c.hora_final, c.hora_cita + interval '50 minutes') - interval '1 minute',
+                           interval '10 minutes') AS t
+     WHERE c.profesional_id IS NOT NULL AND c.hora_cita IS NOT NULL
+       AND c.fecha_cita BETWEEN greatest(${desde}::date, DATE '${CAPACIDAD_DESDE}') AND ${hasta}::date
+       AND ((c.es_cita_paciente AND c.grupo IN ('Asistió', 'No asistió', 'Programada', 'Sin cierre'))
+            OR (NOT c.es_cita_paciente AND c.grupo IN ('Asistió', 'Programada', 'Sin cierre')))
+  ),
+  slots AS (
+    SELECT s.*, (s.profesional_id, s.fecha, s.hora) IN (SELECT profesional_id, fecha_cita, hora FROM slots_oc) AS ocupado
+      FROM slots_base s
   )`;
 
 /**
