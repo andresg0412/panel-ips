@@ -7,6 +7,7 @@ import { rangoAnterior, useSombras, type Incidente } from '../incidentes';
 import { fecha } from '../format';
 import Sistema from './Sistema';
 import { CalendarioEjecuciones } from './CampanasEfecto';
+import { Bloqueado, useAcceso } from '../acceso';
 
 interface Alerta {
   alerta: string;
@@ -73,6 +74,13 @@ function NotaPeriodo({ rango, incidentes }: { rango: Rango; incidentes: Incident
 }
 
 export default function Alertas({ rango }: { rango: Rango }) {
+  const { puede } = useAcceso();
+  if (!puede('alertas.panel')) return <Bloqueado clave="alertas.panel" titulo="Alertas operativas y salud de los datos" alto={320} />;
+  return <AlertasPanel rango={rango} />;
+}
+
+function AlertasPanel({ rango }: { rango: Rango }) {
+  const { puede } = useAcceso();
   const { data, error, cargando } = useApi<{ activas: Alerta[]; incidentes: Incidente[] }>('/api/alertas', 60_000);
   const salud = useApi<Salud>(conRango('/api/alertas/salud', rango), 300_000);
   const sombras = useSombras(['general']);
@@ -135,9 +143,11 @@ export default function Alertas({ rango }: { rango: Rango }) {
         </>
       )}
 
-      <Tarjeta titulo="Ejecuciones de las campañas" ayuda="Cada cuadro es una campaña en un día. Pase el cursor para ver cuántas citas procesó y cuántos mensajes envió.">
-        <CalendarioEjecuciones rango={rango} />
-      </Tarjeta>
+      {puede('campanas.ejecuciones') && (
+        <Tarjeta titulo="Ejecuciones de las campañas" ayuda="Cada cuadro es una campaña en un día. Pase el cursor para ver cuántas citas procesó y cuántos mensajes envió.">
+          <CalendarioEjecuciones rango={rango} />
+        </Tarjeta>
+      )}
 
       <Tarjeta titulo="Salud diaria de los datos" ayuda="Si una de estas líneas cae a cero sin motivo, algo dejó de funcionar. Los días con incidentes conocidos aparecen sombreados.">
         <Estado cargando={salud.cargando} error={salud.error} hayDatos={!!salud.data} />

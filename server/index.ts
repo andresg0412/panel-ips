@@ -3,40 +3,46 @@ import fastifyStatic from '@fastify/static';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { pool } from './db.js';
+import { pool, poolApp } from './db.js';
 import { ErrorParametro } from './params.js';
-import rutasResumen from './routes/resumen.js';
-import rutasCampanas from './routes/campanas.js';
-import rutasAgenda from './routes/agenda.js';
-import rutasChatbot from './routes/chatbot.js';
-import rutasListaEspera from './routes/listaEspera.js';
-import rutasPacientes from './routes/pacientes.js';
-import rutasSistema from './routes/sistema.js';
-import rutasProfesionales from './routes/profesionales.js';
-import rutasAlertas from './routes/alertas.js';
-import rutasCampanas2 from './routes/campanas2.js';
-import rutasOleada2 from './routes/oleada2.js';
-import { INCIDENTES } from './incidentes.js';
+import { incidentes, recargarIncidentes } from './incidentes.js';
+import { prepararEsquema } from './esquema.js';
+import { instalarAcceso, registrarError } from './acceso.js';
+import { instalarRecortes } from './recortes.js';
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, trustProxy: true });
 
 app.setErrorHandler((err, req, reply) => {
   if (err instanceof ErrorParametro) return reply.code(400).send({ error: err.message });
-  const e = err as { code?: string; message: string };
+  const e = err as { code?: string; message: string; validation?: unknown; statusCode?: number };
+  if (e.validation) return reply.code(400).send({ error: `Datos inválidos: ${e.message}` });
+  if (e.statusCode && e.statusCode >= 400 && e.statusCode < 500) return reply.code(e.statusCode).send({ error: e.message });
   // 57014 = statement_timeout de Postgres.
   if (e.code === '57014') {
     req.log.warn({ url: req.url }, 'consulta cancelada por tiempo');
+    registrarError('timeout');
     return reply.code(503).send({ error: 'La consulta tardó demasiado. Pruebe con un rango de fechas más corto.' });
   }
   if (e.code === 'ECONNREFUSED' || e.code === '57P03' || e.code === 'ENOTFOUND') {
+    registrarError('bd');
     return reply.code(503).send({ error: 'La base de datos no está disponible en este momento (posible despliegue en curso).' });
   }
   req.log.error(err);
+  registrarError('interno');
   return reply.code(500).send({ error: 'Error interno del panel' });
 });
 
-// nginx (auth_basic) envía el usuario autenticado en X-Remote-User.
-app.get('/api/yo', async (req) => ({ usuario: req.headers['x-remote-user'] ?? null }));
+// Esquema propio del panel e incidentes de datos, antes de cargar las rutas: sql.ts arma sus rangos de
+// incidentes al importarse.
+try {
+  await prepararEsquema((m) => app.log.info(m));
+  await recargarIncidentes();
+} catch (e) {
+  app.log.error(e, 'no se pudo preparar el esquema panel; se usan los incidentes base');
+}
+
+instalarAcceso(app);
+instalarRecortes(app);
 
 app.get('/api/health', async (_req, reply) => {
   try {
@@ -47,20 +53,18 @@ app.get('/api/health', async (_req, reply) => {
   }
 });
 
-await app.register(rutasResumen);
-await app.register(rutasCampanas);
-await app.register(rutasAgenda);
-await app.register(rutasChatbot);
-await app.register(rutasListaEspera);
-await app.register(rutasPacientes);
-await app.register(rutasSistema);
-await app.register(rutasProfesionales);
-await app.register(rutasAlertas);
-await app.register(rutasCampanas2);
-await app.register(rutasOleada2);
-
 // Incidentes de datos conocidos (TR-01): el frontend los sombrea en los gráficos de tiempo.
-app.get('/api/incidentes', async () => ({ incidentes: INCIDENTES }));
+app.get('/api/incidentes', async () => ({ incidentes: incidentes() }));
+
+const rutas = [
+  './routes/plan.js', './routes/resumen.js', './routes/campanas.js', './routes/agenda.js', './routes/chatbot.js',
+  './routes/listaEspera.js', './routes/pacientes.js', './routes/sistema.js', './routes/profesionales.js',
+  './routes/alertas.js', './routes/campanas2.js', './routes/oleada2.js', './routes/soporte.js',
+];
+for (const r of rutas) await app.register((await import(r)).default);
+
+const { iniciarVigilante } = await import('./vigilante.js');
+const detenerVigilante = iniciarVigilante();
 
 // Frontend compilado (dist/web). En desarrollo lo sirve Vite con proxy a /api.
 const webDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'web');
@@ -83,8 +87,10 @@ if (existsSync(webDir)) {
 }
 
 const cerrar = async () => {
+  detenerVigilante();
   await app.close();
   await pool.end();
+  await poolApp?.end();
   process.exit(0);
 };
 process.on('SIGTERM', cerrar);

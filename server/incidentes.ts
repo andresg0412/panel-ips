@@ -1,7 +1,8 @@
-// Incidentes de datos conocidos (TR-01, Oleada 1). Períodos en que el sistema no registró bien la
-// información: el panel los sombrea en los gráficos y advierte cuando una comparación los incluye.
-// En la Oleada 2 se reemplaza por la tabla `incidentes_datos` (migración 035 de proyecto-ips).
+// Incidentes de datos conocidos (TR-01). Períodos en que el sistema no registró bien la información: el panel
+// los sombrea en los gráficos y no compara contra ellos. Desde la Etapa 1 viven en panel.incidentes y se editan
+// en la consola de soporte; esta lista es la carga inicial y el respaldo si esa tabla no responde.
 // Fechas en hora de Bogotá, ambas inclusive. Fuente: docs/catalogo-analitica.md, hallazgo D1.
+import { poolApp } from './db.js';
 
 export type AreaIncidente = 'general' | 'agenda' | 'whatsapp' | 'conversaciones' | 'eventos' | 'trazabilidad';
 
@@ -13,7 +14,7 @@ export interface Incidente {
   descripcion: string;
 }
 
-export const INCIDENTES: Incidente[] = [
+export const INCIDENTES_BASE: Incidente[] = [
   {
     area: 'general',
     desde: '2026-04-01',
@@ -57,3 +58,21 @@ export const INCIDENTES: Incidente[] = [
     descripcion: 'Las campañas sí se enviaron, pero no quedaron en el registro detallado de envíos.',
   },
 ];
+
+export const AREAS_INCIDENTE: AreaIncidente[] = ['general', 'agenda', 'whatsapp', 'conversaciones', 'eventos', 'trazabilidad'];
+
+let actuales: Incidente[] = INCIDENTES_BASE;
+
+/** Incidentes vigentes (última lectura de panel.incidentes). */
+export function incidentes(): Incidente[] {
+  return actuales;
+}
+
+/** Vuelve a leer panel.incidentes. Si falla, conserva la última lista buena. */
+export async function recargarIncidentes(): Promise<void> {
+  if (!poolApp) return;
+  const { rows } = await poolApp.query<Incidente>(
+    `SELECT area, desde::text AS desde, hasta::text AS hasta, titulo, descripcion FROM panel.incidentes ORDER BY desde, id`,
+  );
+  actuales = rows;
+}

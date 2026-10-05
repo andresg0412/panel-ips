@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { conCache } from '../cache.js';
+import { claveCache } from '../acceso.js';
 import { ErrorParametro, leerRango, leerTexto } from '../params.js';
 import { CITAS, MESES, NOSHOW } from '../sql.js';
 
@@ -31,7 +32,7 @@ export default async function rutasProfesionales(app: FastifyInstance) {
   app.get('/api/profesionales', async (req) => {
     const r = leerRango(req.query as Record<string, unknown>);
     const p = [r.desde, r.hasta];
-    return conCache(req.url, async () => {
+    return conCache(claveCache(req), async () => {
       const filas = await query(
         `WITH ${CITAS}, ${RETENCION},
          ret AS (
@@ -73,7 +74,7 @@ export default async function rutasProfesionales(app: FastifyInstance) {
     const nombre = leerTexto(q, 'nombre', 120);
     if (!nombre) throw new ErrorParametro('Falta el nombre del profesional');
     const p = [r.desde, r.hasta, nombre];
-    return conCache(req.url, async () => {
+    return conCache(claveCache(req), async () => {
       const [kpis, mensual, servicios, franja, dia] = await Promise.all([
         queryOne(
           `WITH ${CITAS}

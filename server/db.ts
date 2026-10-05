@@ -23,6 +23,32 @@ pool.on('error', (err) => {
   console.error('Error en conexión inactiva de Postgres:', err.message);
 });
 
+/**
+ * Segunda conexión, con el rol panel_app: solo puede escribir en el esquema `panel` (licencia, usuarios y roles,
+ * alertas de soporte, actividad, incidentes). No tiene permisos sobre las tablas del bot ni del backend.
+ * Ver deploy/crear-esquema-panel.sql.
+ */
+export const poolApp = process.env.DATABASE_URL_APP
+  ? new pg.Pool({
+      connectionString: process.env.DATABASE_URL_APP,
+      max: 2,
+      idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 10_000,
+      statement_timeout: 10_000,
+      application_name: 'panel-ips-app',
+    })
+  : null;
+
+poolApp?.on('error', (err) => {
+  console.error('Error en conexión inactiva de Postgres (panel_app):', err.message);
+});
+
+export async function queryApp<T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> {
+  if (!poolApp) throw new Error('DATABASE_URL_APP no está configurada');
+  const res = await poolApp.query(sql, params);
+  return res.rows as T[];
+}
+
 export async function query<T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> {
   const res = await pool.query(sql, params);
   return res.rows as T[];

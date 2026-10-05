@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { conCache } from '../cache.js';
+import { claveCache } from '../acceso.js';
 import { hoyBogota, leerRango, sumarDias } from '../params.js';
 import { CITAS, HOY } from '../sql.js';
 import { CAPACIDAD_DESDE, CICLO, capacidad, contacto } from '../sql2.js';
@@ -13,7 +14,7 @@ export default async function rutasOleada2(app: FastifyInstance) {
   // y el 3-oct-2026 (scraper); antes de eso la cancelación no tiene fecha y cuenta como "sin dato".
   app.get('/api/agenda/cancelaciones', async (req) => {
     const r = leerRango(req.query as Record<string, unknown>);
-    return conCache(req.url, async () => ({
+    return conCache(claveCache(req), async () => ({
       tramos: await query(
         `WITH ${CITAS},
          primero AS (
@@ -39,7 +40,7 @@ export default async function rutasOleada2(app: FastifyInstance) {
 
   // AGE-09: carga de las próximas 4 semanas frente a la capacidad y a las mismas semanas del año anterior.
   app.get('/api/agenda/proximas', async (req) =>
-    conCache(req.url, async () => {
+    conCache(claveCache(req), async () => {
       const hoy = hoyBogota();
       const fin = sumarDias(hoy, 27);
       const filas = await query(
@@ -63,7 +64,7 @@ export default async function rutasOleada2(app: FastifyInstance) {
   // PRO-01: ocupación de la agenda (días ya pasados del rango) y PRO-03: cupos libres de los próximos 14 días.
   app.get('/api/profesionales/ocupacion', async (req) => {
     const r = leerRango(req.query as Record<string, unknown>);
-    return conCache(req.url, async () => {
+    return conCache(claveCache(req), async () => {
       const ayer = sumarDias(hoyBogota(), -1);
       const hasta = r.hasta < ayer ? r.hasta : ayer;
       const [porProfesional, porSemana, libres] = await Promise.all([
@@ -103,7 +104,7 @@ export default async function rutasOleada2(app: FastifyInstance) {
   // ------------------------------------------------------------------------------------------ Pacientes
   // PAC-02: cohortes de retención (mes de la primera atención × meses después) y PAC-04: estado de actividad.
   app.get('/api/pacientes/ciclo', async (req) =>
-    conCache(req.url, async () => {
+    conCache(claveCache(req), async () => {
       const [cohortes, estados] = await Promise.all([
         query(
           `WITH ${CITAS}, ${CICLO},
@@ -139,7 +140,7 @@ export default async function rutasOleada2(app: FastifyInstance) {
   // MKT-01: alcance de WhatsApp por mes. MKT-02: segmentos de pacientes en riesgo o inactivos para recuperar,
   // sin contar a quienes ya recibieron un mensaje de recuperación en los últimos 30 días.
   app.get('/api/marketing', async (req) =>
-    conCache(req.url, async () => {
+    conCache(claveCache(req), async () => {
       const [alcance, telefonos, segmentos] = await Promise.all([
         query(
           `SELECT to_char(fecha_bogota, 'YYYY-MM') AS mes,
@@ -182,7 +183,7 @@ export default async function rutasOleada2(app: FastifyInstance) {
   // CHB-03: mensajes que el bot no entendió. Ambos con trazabilidad v2 (desde el 1-oct-2026).
   app.get('/api/chatbot/demanda', async (req) => {
     const r = leerRango(req.query as Record<string, unknown>);
-    return conCache(req.url, async () => {
+    return conCache(claveCache(req), async () => {
       const [sinConvertir, noEntendidos, porPaso] = await Promise.all([
         query(
           `WITH vio AS (
@@ -222,7 +223,7 @@ export default async function rutasOleada2(app: FastifyInstance) {
   // y ocupación de la agenda (solo profesionales con horario registrado, desde el 6-ago-2026).
   app.get('/api/resumen/metas', async (req) => {
     const r = leerRango(req.query as Record<string, unknown>);
-    return conCache(req.url, async () => {
+    return conCache(claveCache(req), async () => {
       const ayer = sumarDias(hoyBogota(), -1);
       const hasta = r.hasta < ayer ? r.hasta : ayer;
       const [nuevos, confirmadas, ocupacion] = await Promise.all([

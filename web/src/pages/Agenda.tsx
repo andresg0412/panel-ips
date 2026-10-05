@@ -5,6 +5,7 @@ import { barrasApiladas, pivotar, ranking } from '../components/series';
 import { Estado, Kpi, ListaConteo, Tabla, Tarjeta, type Columna } from '../components/ui';
 import { DIAS, etiqueta, fecha, fechaHora, hora, pct } from '../format';
 import { Pestanas, usePestana, useSombras } from '../incidentes';
+import { Bloqueado, Restringido, useAcceso } from '../acceso';
 import { AgendaProximas, AnticipacionCancelaciones } from './Ocupacion';
 import { AgendaCalidad, AgendaInasistencia, AgendaTendencias } from './AgendaAnalisis';
 
@@ -96,9 +97,19 @@ type Vista = 'periodo' | 'proximas' | 'inasistencia' | 'tendencias' | 'calidad';
 
 export default function Agenda({ rango }: { rango: Rango }) {
   const [vista, setVista] = usePestana<Vista>(['periodo', 'proximas', 'inasistencia', 'tendencias', 'calidad'], 'periodo');
+  const { puede } = useAcceso();
+  const FUNCION: Record<Vista, [string, string]> = {
+    periodo: ['agenda.periodo', 'Citas del período'],
+    proximas: ['agenda.proximas', 'Próximas semanas'],
+    inasistencia: ['agenda.inasistencia', 'Inasistencia'],
+    tendencias: ['agenda.tendencias', 'Tendencias'],
+    calidad: ['agenda.calidad', 'Calidad de los datos'],
+  };
+  const bloqueadas = (Object.keys(FUNCION) as Vista[]).filter((v) => !puede(FUNCION[v][0]));
   return (
     <>
       <Pestanas<Vista>
+        bloqueadas={bloqueadas}
         opciones={[
           ['periodo', 'Período'],
           ['proximas', 'Próximas semanas'],
@@ -109,11 +120,12 @@ export default function Agenda({ rango }: { rango: Rango }) {
         valor={vista}
         onCambio={setVista}
       />
-      {vista === 'periodo' && <AgendaPeriodo rango={rango} />}
-      {vista === 'proximas' && <AgendaProximas />}
-      {vista === 'inasistencia' && <AgendaInasistencia rango={rango} />}
-      {vista === 'tendencias' && <AgendaTendencias />}
-      {vista === 'calidad' && <AgendaCalidad />}
+      {bloqueadas.includes(vista) && <Bloqueado clave={FUNCION[vista][0]} titulo={FUNCION[vista][1]} alto={280} />}
+      {!bloqueadas.includes(vista) && vista === 'periodo' && <AgendaPeriodo rango={rango} />}
+      {!bloqueadas.includes(vista) && vista === 'proximas' && <AgendaProximas />}
+      {!bloqueadas.includes(vista) && vista === 'inasistencia' && <AgendaInasistencia rango={rango} />}
+      {!bloqueadas.includes(vista) && vista === 'tendencias' && <AgendaTendencias />}
+      {!bloqueadas.includes(vista) && vista === 'calidad' && <AgendaCalidad />}
     </>
   );
 }
@@ -188,7 +200,9 @@ function AgendaPeriodo({ rango }: { rango: Rango }) {
               <ListaConteo items={data.origenCancelacion.map((o) => ({ clave: o.origen, etiqueta: etiqueta(o.origen), n: o.n }))} total={totalCanceladas} />
             </Tarjeta>
           </div>
-          <AnticipacionCancelaciones rango={rango} />
+          <Restringido clave="agenda.inasistencia" titulo="¿Con cuánta anticipación cancelan?">
+            <AnticipacionCancelaciones rango={rango} />
+          </Restringido>
           <Tarjeta titulo="Últimos cambios de estado" ayuda="Registro disponible desde fines de septiembre de 2026.">
             <Tabla filas={data.cambios} columnas={COLS_CAMBIO} nombreCsv="cambios_estado" vacio="Sin cambios registrados en este período" />
           </Tarjeta>

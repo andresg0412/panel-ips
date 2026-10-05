@@ -5,6 +5,7 @@ import { barrasApiladas, lineas, pequenosMultiplos, pivotar } from '../component
 import { Estado, Kpi, ListaConteo, Tarjeta } from '../components/ui';
 import { useSombras } from '../incidentes';
 import { METAS } from '../metas';
+import { Restringido, useAcceso } from '../acceso';
 import { num, ratio, tasaTxt } from '../format';
 
 type N = Record<string, number>;
@@ -39,8 +40,10 @@ const noOcurrio = (c: N) => ratio(c.canceladas + c.reprogramadas, c.total);
 export default function Resumen({ rango }: { rango: Rango }) {
   const r = useApi<DatosResumen>(conRango('/api/resumen', rango), 120_000);
   const s = useApi<DatosSeries>(conRango('/api/resumen/series', rango), 120_000);
-  const t = useApi<Tendencia>('/api/resumen/tendencia');
-  const m = useApi<Metas>(conRango('/api/resumen/metas', rango), 300_000);
+  const { puede } = useAcceso();
+  const conMetas = puede('resumen.metas');
+  const t = useApi<Tendencia>(puede('resumen.tendencia') ? '/api/resumen/tendencia' : null);
+  const m = useApi<Metas>(conMetas ? conRango('/api/resumen/metas', rango) : null, 300_000);
   const incAgenda = useSombras(['agenda']);
   const incWhatsapp = useSombras(['whatsapp', 'trazabilidad']);
   const incConv = useSombras(['conversaciones']);
@@ -85,7 +88,7 @@ export default function Resumen({ rango }: { rango: Rango }) {
       {a && (
         <div className="kpis">
           <Kpi etiqueta="Citas atendidas" actual={a.citas.asistio} anterior={p?.citas.asistio} comparacion={comp} />
-          <Kpi etiqueta="Tasa de asistencia" formato="pct" actual={asistencia(a.citas)} anterior={p ? asistencia(p.citas) : undefined} comparacion={comp} meta={{ valor: METAS.asistencia }} />
+          <Kpi etiqueta="Tasa de asistencia" formato="pct" actual={asistencia(a.citas)} anterior={p ? asistencia(p.citas) : undefined} comparacion={comp} meta={conMetas ? { valor: METAS.asistencia } : undefined} />
           <Kpi
             etiqueta="Citas que no ocurrieron"
             formato="pct"
@@ -93,11 +96,15 @@ export default function Resumen({ rango }: { rango: Rango }) {
             anterior={p ? noOcurrio(p.citas) : undefined}
             mejorSiSube={false}
             comparacion={comp}
-            meta={{ valor: METAS.noOcurrieron, mejorSiSube: false }}
+            meta={conMetas ? { valor: METAS.noOcurrieron, mejorSiSube: false } : undefined}
           />
-          <Kpi etiqueta="Ocupación de la agenda" formato="pct" actual={ocupacion} meta={{ valor: METAS.ocupacion }} />
-          <Kpi etiqueta="Citas confirmadas por WhatsApp" formato="pct" actual={confWhatsapp} meta={{ valor: METAS.confirmadasWhatsapp }} />
-          <Kpi etiqueta="Pacientes nuevos atendidos" actual={md ? md.nuevos.nuevos : null} />
+          {conMetas && (
+            <>
+              <Kpi etiqueta="Ocupación de la agenda" formato="pct" actual={ocupacion} meta={{ valor: METAS.ocupacion }} />
+              <Kpi etiqueta="Citas confirmadas por WhatsApp" formato="pct" actual={confWhatsapp} meta={{ valor: METAS.confirmadasWhatsapp }} />
+              <Kpi etiqueta="Pacientes nuevos atendidos" actual={md ? md.nuevos.nuevos : null} />
+            </>
+          )}
           <Kpi etiqueta="Citas nuevas registradas" actual={a.citas.registradas} anterior={p?.citas.registradas} comparacion={comp} />
           <Kpi etiqueta="Mensajes de campaña enviados" actual={a.envios.enviados} anterior={p?.envios.enviados} comparacion={comp} />
           <Kpi etiqueta="Respondieron a los mensajes" formato="pct" actual={respuesta(a.envios)} anterior={p ? respuesta(p.envios) : undefined} comparacion={comp} />
@@ -144,11 +151,13 @@ export default function Resumen({ rango }: { rango: Rango }) {
         </>
       )}
 
+      <Restringido clave="resumen.tendencia" titulo="Citas atendidas por mes y especialidad">
       {t.data && (
         <Tarjeta titulo="Citas atendidas por mes y especialidad" ayuda="Desde el inicio de los datos (agosto de 2025), sin importar el período elegido. Cada especialidad con su propia escala.">
           <Grafico opcion={optTendencia} alto={360} />
         </Tarjeta>
       )}
+      </Restringido>
 
       {a && (
         <Tarjeta titulo="Lista de espera" ayuda="Movimiento en el período.">

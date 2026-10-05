@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { conCache } from '../cache.js';
+import { claveCache } from '../acceso.js';
 import { ErrorParametro, leerRango, leerTexto } from '../params.js';
 import { CITAS, MESES } from '../sql.js';
 
@@ -10,7 +11,7 @@ export default async function rutasPacientes(app: FastifyInstance) {
   // Panorama de pacientes: PAC-01 (nuevos y recurrentes), PAC-03 (tiempo entre citas), PAC-05 (perfil).
   app.get('/api/pacientes/panorama', async (req) => {
     const r = leerRango(req.query as Record<string, unknown>);
-    return conCache(req.url, async () => {
+    return conCache(claveCache(req), async () => {
       const [mensual, intervalos, perfil, resumenIntervalos] = await Promise.all([
         // Nuevo en el mes = su primera atención (desde ago-2025) cae en ese mes. Ago-2025 incluye a quienes ya venían.
         query(

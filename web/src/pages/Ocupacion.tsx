@@ -4,6 +4,7 @@ import Grafico, { base, token } from '../components/Grafico';
 import { barrasTasa, mapaCalor } from '../components/series';
 import { Estado, ListaConteo, Tarjeta } from '../components/ui';
 import { DIAS, etiqueta, fecha, fechaCorta, num, pct, tasaTxt } from '../format';
+import { Restringido } from '../acceso';
 
 interface Ocupacion {
   desde: string;
@@ -77,12 +78,14 @@ export default function OcupacionProfesionales({ rango }: { rango: Rango }) {
               {data.porSemana.length ? <Grafico opcion={optSemanas} alto={Math.max(200, data.porProfesional.length * 34 + 70)} /> : <p className="ayuda">Sin datos.</p>}
             </Tarjeta>
           </div>
+          <Restringido clave="profesionales.capacidad" titulo="Cupos libres en los próximos 14 días">
           <Tarjeta
             titulo="Cupos libres en los próximos 14 días"
             ayuda={`${num(totalLibres)} cupos sin cita según el horario de cada profesional. Sirve para ofrecer citas o activar la lista de espera. Conviene validarlo con recepción.`}
           >
             {data.libres.length ? <Grafico opcion={optLibres} alto={Math.max(220, new Set(data.libres.map((l) => l.profesional)).size * 34 + 80)} /> : <p className="ayuda">Sin datos.</p>}
           </Tarjeta>
+          </Restringido>
           {data.sinEnlace.length > 0 && (
             <p className="nota">
               No se puede medir la ocupación de {data.sinEnlace.map((p) => nombreCorto(p.profesional)).join(', ')}: tienen horario registrado, pero sus citas no están

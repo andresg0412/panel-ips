@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { conCache } from '../cache.js';
+import { claveCache } from '../acceso.js';
 import { leerRango } from '../params.js';
 
 // Tablas de public con SELECT explícito para panel_lectura (ver deploy/crear-rol.sql):
@@ -10,7 +11,7 @@ export default async function rutasListaEspera(app: FastifyInstance) {
     const r = leerRango(req.query as Record<string, unknown>);
     const p = [r.desde, r.hasta];
     const enRango = (col: string) => `${col} >= $1::date AND ${col} < $2::date + 1`;
-    return conCache(req.url, async () => {
+    return conCache(claveCache(req), async () => {
       // Las columnas *_at de estas tablas son TIMESTAMP en UTC: se pasan a hora de Bogotá antes de filtrar.
       const bog = (col: string) => `(${col} AT TIME ZONE 'UTC' AT TIME ZONE 'America/Bogota')`;
       const [inscripcionesHoy, inscripciones, cupos, ofertas, invitaciones, cuposRecientes, ofertasRecientes, ejecuciones, embudo, motivos, invitacionesPorTipo] =

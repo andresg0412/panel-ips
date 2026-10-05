@@ -5,6 +5,7 @@ import { barrasApiladas } from '../components/series';
 import { Estado, Kpi, Tabla, Tarjeta, type Columna } from '../components/ui';
 import { useMesesConfiables, useSombras } from '../incidentes';
 import { etiqueta, num, pct } from '../format';
+import { Restringido, useAcceso } from '../acceso';
 
 interface Marketing {
   alcance: { mes: string; personas: number; respondieron: number }[];
@@ -31,6 +32,7 @@ const COLS_SEG: Columna<Marketing['segmentos'][number]>[] = [
 
 export default function Marketing(_: { rango: Rango }) {
   const { data, error, cargando } = useApi<Marketing>('/api/marketing');
+  const { puede } = useAcceso();
   const sombras = useSombras(['whatsapp']);
   const alcance = useMemo(() => (data?.alcance ?? []).filter((m) => m.mes >= '2025-08'), [data]);
 
@@ -61,7 +63,7 @@ export default function Marketing(_: { rango: Rango }) {
             <Kpi etiqueta="Personas alcanzadas por WhatsApp al mes" valor={promPersonas === null ? undefined : `${num(promPersonas)}`} actual={promPersonas} comparacion="" />
             <Kpi etiqueta="Pacientes con celular válido" valor={pct(t.con_celular, t.pacientes, 0)} actual={null} />
             <Kpi etiqueta="Personas que alguna vez respondieron" actual={t.respondieron_alguna_vez} />
-            <Kpi etiqueta="Pacientes en riesgo que se pueden contactar" actual={disponiblesRiesgo} />
+            {puede('marketing.segmentos') && <Kpi etiqueta="Pacientes en riesgo que se pueden contactar" actual={disponiblesRiesgo} />}
           </div>
           <Tarjeta
             titulo="Alcance de WhatsApp por mes"
@@ -69,6 +71,7 @@ export default function Marketing(_: { rango: Rango }) {
           >
             <Grafico opcion={optAlcance} alto={280} />
           </Tarjeta>
+          <Restringido clave="marketing.segmentos" titulo="Segmentos para invitar a volver">
           <Tarjeta
             titulo="Segmentos para invitar a volver"
             ayuda="Pacientes en riesgo o inactivos, por especialidad y forma de pago. No cuenta a quienes ya recibieron un mensaje de recuperación en los últimos 30 días. En salud mental, recontactar exige cuidado: conviene validar el texto y la frecuencia con la IPS."
@@ -78,6 +81,7 @@ export default function Marketing(_: { rango: Rango }) {
               Para descargar la lista de pacientes en riesgo con sus datos de contacto, use Pacientes → Retención y actividad.
             </p>
           </Tarjeta>
+          </Restringido>
         </>
       )}
     </>

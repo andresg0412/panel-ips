@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { query } from '../db.js';
 import { conCache } from '../cache.js';
+import { claveCache } from '../acceso.js';
 import { leerRango } from '../params.js';
 import { CITAS, HOY, MESES, NOSHOW, PERIODOS, periodo } from '../sql.js';
 
@@ -29,7 +30,7 @@ export default async function rutasAgenda(app: FastifyInstance) {
   app.get('/api/agenda', async (req) => {
     const r = leerRango(req.query as Record<string, unknown>);
     const p = [r.desde, r.hasta];
-    return conCache(req.url, async () => {
+    return conCache(claveCache(req), async () => {
       const [serie, especialidad, profesional, administradora, diaSemana, origenCancelacion, cambios, servicio] = await Promise.all([
         query(
           `WITH ${CITAS}, p AS (${PERIODOS})
@@ -107,7 +108,7 @@ export default async function rutasAgenda(app: FastifyInstance) {
   app.get('/api/agenda/inasistencia', async (req) => {
     const r = leerRango(req.query as Record<string, unknown>);
     const p = [r.desde, r.hasta];
-    return conCache(req.url, async () => {
+    return conCache(claveCache(req), async () => {
       const [mapa, edad, modalidad, anticipacion, especialidad, pago, servicio] = await Promise.all([
         query(
           `WITH ${CITAS}
@@ -139,7 +140,7 @@ export default async function rutasAgenda(app: FastifyInstance) {
   // Tendencias mensuales desde el inicio de los datos (no dependen del rango): AGE-02, 04, 05, 06, 07.
   app.get('/api/agenda/historico', async (req) =>
     conCache(
-      req.url,
+      claveCache(req),
       async () => {
         const [mensual, servicios, espera, convenios] = await Promise.all([
           query(
@@ -199,7 +200,7 @@ export default async function rutasAgenda(app: FastifyInstance) {
   // AGE-08: citas sin cierre por mes y citas sin profesional asignado en el maestro `equipo`.
   app.get('/api/agenda/calidad', async (req) =>
     conCache(
-      req.url,
+      claveCache(req),
       async () => {
         const [sinCierre, sinProfesional, administrativas] = await Promise.all([
           query(

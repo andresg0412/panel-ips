@@ -1,8 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { conCache } from '../cache.js';
+import { claveCache } from '../acceso.js';
 import { hoyBogota, leerRango, sumarDias } from '../params.js';
-import { INCIDENTES } from '../incidentes.js';
+import { incidentes } from '../incidentes.js';
 import { HOY } from '../sql.js';
 import { PROGRAMACION, ejecuciones } from '../sql2.js';
 
@@ -11,6 +12,8 @@ export interface Alerta {
   severidad: 'alta' | 'media';
   titulo: string;
   detalle: string;
+  /** Distingue ocurrencias de la misma regla (campaña, día) para el seguimiento de soporte. */
+  instancia?: string;
 }
 
 // Errores de envío: la mayor de dos fuentes (envios_whatsapp puede faltar, como del 1 al 3 de octubre de 2026,
@@ -38,7 +41,7 @@ const FALLO_DIARIO = `
  * A5 cero conversaciones un día hábil después del mediodía;
  * A6 más de 10 eventos de error del bot en el día.
  */
-async function alertasActivas(): Promise<Alerta[]> {
+export async function alertasActivas(): Promise<Alerta[]> {
   const [ahora, ejecHoy, fallos, agenda, sesiones, errores] = await Promise.all([
     queryOne<{ hoy: string; hora: string; dow: number; festivo: boolean }>(
       `SELECT ${HOY}::text AS hoy, to_char(now() AT TIME ZONE 'America/Bogota', 'HH24:MI') AS hora,
@@ -85,6 +88,7 @@ async function alertasActivas(): Promise<Alerta[]> {
     if (!e && ahora.hora > limite) {
       alertas.push({
         alerta: 'campana_no_corrio',
+        instancia: `${p.campana}:${ahora.hoy}`,
         severidad: 'alta',
         titulo: `La campaña ${p.campana} no corrió hoy`,
         detalle: `Estaba programada a las ${p.hora} y no hay registro de ejecución.`,
@@ -93,6 +97,7 @@ async function alertasActivas(): Promise<Alerta[]> {
     if (e && e.procesadas > 0 && e.exitosos === 0) {
       alertas.push({
         alerta: 'campana_sin_envios',
+        instancia: `${p.campana}:${ahora.hoy}`,
         severidad: 'alta',
         titulo: `La campaña ${p.campana} no envió mensajes`,
         detalle: `Procesó ${e.procesadas} citas y envió 0${e.errores ? `, con ${e.errores} errores` : ' sin registrar errores'}.`,
@@ -103,6 +108,7 @@ async function alertasActivas(): Promise<Alerta[]> {
     if (f.pct !== null && f.pct > 20) {
       alertas.push({
         alerta: 'fallo_envio_alto',
+        instancia: f.fecha,
         severidad: f.pct >= 50 ? 'alta' : 'media',
         titulo: `WhatsApp rechazó el ${String(f.pct).replace('.', ',')} % de los envíos`,
         detalle: `Día ${f.fecha}. Más del 20 % de envíos fallidos indica un problema con WhatsApp o con los números.`,
@@ -142,13 +148,13 @@ export default async function rutasAlertas(app: FastifyInstance) {
 
   app.get('/api/alertas', async () => ({
     activas: await conCache('alertas', alertasActivas, 60_000),
-    incidentes: INCIDENTES,
+    incidentes: incidentes(),
   }));
 
   // SIS-02: salud diaria de los datos. Cinco series que muestran cuándo dejó de llegar algo.
   app.get('/api/alertas/salud', async (req) => {
     const r = leerRango(req.query as Record<string, unknown>);
-    return conCache(req.url, async () => ({
+    return conCache(claveCache(req), async () => ({
       dias: await query(
         `WITH ${FALLO_DIARIO},
          ses AS (SELECT fecha_bogota AS fecha, count(*) AS n FROM bi.fact_sesiones WHERE fecha_bogota BETWEEN $1 AND $2 GROUP BY 1),

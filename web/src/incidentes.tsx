@@ -1,6 +1,7 @@
 import { createContext, useContext, useMemo, useState } from 'react';
 import type { Rango } from './api';
 import type { Sombra } from './components/series';
+import { Candado } from './acceso';
 
 // Incidentes de datos conocidos (TR-01). Los entrega /api/incidentes; aquí se reparten a las pantallas.
 export type Area = 'general' | 'agenda' | 'whatsapp' | 'conversaciones' | 'eventos' | 'trazabilidad';
@@ -46,12 +47,19 @@ export function rangoAnterior(r: Rango): Rango {
   return { desde: ini, hasta: fin };
 }
 
-export function Pestanas<T extends string>({ opciones, valor, onCambio }: { opciones: [T, string][]; valor: T; onCambio: (v: T) => void }) {
+export function Pestanas<T extends string>({ opciones, valor, onCambio, bloqueadas = [] }: {
+  opciones: [T, string][];
+  valor: T;
+  onCambio: (v: T) => void;
+  /** Pestañas que el plan no incluye: se ven con candado y al abrirlas muestran la vista previa bloqueada. */
+  bloqueadas?: T[];
+}) {
   return (
     <div className="pestanas" role="tablist">
       {opciones.map(([k, t]) => (
         <button key={k} role="tab" aria-selected={valor === k} className={valor === k ? 'activo' : ''} onClick={() => onCambio(k)}>
           {t}
+          {bloqueadas.includes(k) && <Candado titulo="No incluido en su plan" />}
         </button>
       ))}
     </div>

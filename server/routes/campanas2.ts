@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { conCache } from '../cache.js';
+import { claveCache } from '../acceso.js';
 import { ErrorParametro, leerRango, leerTexto } from '../params.js';
 import { CITAS } from '../sql.js';
 import { contacto, ejecuciones } from '../sql2.js';
@@ -16,7 +17,7 @@ export default async function rutasCampanas2(app: FastifyInstance) {
     const r = leerRango(q);
     const campana = leerTexto(q, 'campana', 30) ?? 'reminder';
     if (!CAMPANAS_EMBUDO.has(campana)) throw new ErrorParametro('Campaña inválida');
-    return conCache(req.url, async () => {
+    return conCache(claveCache(req), async () => {
       const [etapas, seguimiento] = await Promise.all([
         queryOne(
           `WITH e AS (
@@ -53,7 +54,7 @@ export default async function rutasCampanas2(app: FastifyInstance) {
   // CAM-03 y CAM-04: inasistencia según el contacto por WhatsApp y cobertura de los recordatorios.
   app.get('/api/campanas/contacto', async (req) => {
     const r = leerRango(req.query as Record<string, unknown>);
-    return conCache(req.url, async () => {
+    return conCache(claveCache(req), async () => {
       const filas = await query(
         `WITH ${CITAS}, ${contacto('$1', '$2')}
          SELECT grupo_contacto AS clave,
@@ -77,7 +78,7 @@ export default async function rutasCampanas2(app: FastifyInstance) {
   // fue elegido para el mensaje pero no lo recibió.
   app.get('/api/campanas/recuperacion', async (req) =>
     conCache(
-      req.url,
+      claveCache(req),
       async () => {
         const filas = await query(
           `WITH ${CITAS},
@@ -114,7 +115,7 @@ export default async function rutasCampanas2(app: FastifyInstance) {
   // CAM-07: ejecuciones de campaña por día (calendario). Detecta corridas que procesaron citas sin enviar nada.
   app.get('/api/campanas/ejecuciones', async (req) => {
     const r = leerRango(req.query as Record<string, unknown>);
-    return conCache(req.url, async () => ({
+    return conCache(claveCache(req), async () => ({
       filas: await query(
         `WITH ${ejecuciones('$1')}
          SELECT fecha, campana, count(*) AS corridas,

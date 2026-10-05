@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useApi, type Rango } from '../api';
 import { Pestanas, usePestana } from '../incidentes';
+import { Bloqueado, useAcceso } from '../acceso';
 import PacientesPanorama from './PacientesPanorama';
 import PacientesRetencion from './PacientesRetencion';
 import { Estado, Tabla, Tarjeta, type Columna } from '../components/ui';
@@ -58,21 +59,24 @@ const CAMPOS: [string, string][] = [
 ];
 
 export default function Pacientes({ rango }: { rango: Rango }) {
-  const [vista, setVista] = usePestana<'panorama' | 'retencion' | 'buscar'>(['panorama', 'retencion', 'buscar'], 'panorama');
+  const { puede, visible } = useAcceso();
+  type V = 'panorama' | 'retencion' | 'buscar';
+  const FUNCION: Record<V, [string, string]> = {
+    panorama: ['pacientes.panorama', 'Panorama'],
+    retencion: ['pacientes.retencion', 'Retención y actividad'],
+    buscar: ['pacientes.buscar', 'Buscar un paciente'],
+  };
+  // Pestañas que el rol no incluye no se muestran; las que el plan no incluye, con candado.
+  const opciones = (Object.keys(FUNCION) as V[]).filter((v) => visible(FUNCION[v][0]));
+  const [vista, setVista] = usePestana<V>(opciones, 'panorama');
+  const bloqueadas = opciones.filter((v) => !puede(FUNCION[v][0]));
   return (
     <>
-      <Pestanas
-        opciones={[
-          ['panorama', 'Panorama'],
-          ['retencion', 'Retención y actividad'],
-          ['buscar', 'Buscar un paciente'],
-        ]}
-        valor={vista}
-        onCambio={setVista}
-      />
-      {vista === 'panorama' && <PacientesPanorama rango={rango} />}
-      {vista === 'retencion' && <PacientesRetencion />}
-      {vista === 'buscar' && <BuscarPaciente />}
+      <Pestanas<V> opciones={opciones.map((v) => [v, FUNCION[v][1]])} valor={vista} onCambio={setVista} bloqueadas={bloqueadas} />
+      {bloqueadas.includes(vista) && <Bloqueado clave={FUNCION[vista][0]} titulo={FUNCION[vista][1]} alto={280} />}
+      {!bloqueadas.includes(vista) && vista === 'panorama' && <PacientesPanorama rango={rango} />}
+      {!bloqueadas.includes(vista) && vista === 'retencion' && <PacientesRetencion />}
+      {!bloqueadas.includes(vista) && vista === 'buscar' && <BuscarPaciente />}
     </>
   );
 }

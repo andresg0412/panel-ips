@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import type { Rango } from '../api';
+import { registrar, type Rango } from '../api';
 import { num } from '../format';
+import { useAcceso, Candado } from '../acceso';
 
 export function Tarjeta({ titulo, ayuda, children, accion }: { titulo: string; ayuda?: ReactNode; children: ReactNode; accion?: ReactNode }) {
   return (
@@ -105,6 +106,7 @@ function aCsv<T>(filas: T[], cols: Columna<T>[]): string {
 }
 
 export function descargarCsv<T>(nombre: string, filas: T[], cols: Columna<T>[]) {
+  registrar('exportacion', nombre, `${filas.length} filas`);
   // BOM para que Excel abra bien las tildes; ';' como separador (configuración regional de Colombia).
   const blob = new Blob(['﻿' + aCsv(filas, cols)], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
@@ -122,6 +124,7 @@ export function Tabla<T extends Record<string, any>>({ filas, columnas, nombreCs
   vacio?: string;
 }) {
   const [orden, setOrden] = useState<{ col: number; asc: boolean } | null>(null);
+  const { puede, visible, nivelDe, nombreNivel } = useAcceso();
   const ordenadas = useMemo(() => {
     if (!orden) return filas;
     const c = columnas[orden.col];
@@ -176,7 +179,13 @@ export function Tabla<T extends Record<string, any>>({ filas, columnas, nombreCs
       {nombreCsv && filas.length > 0 && (
         <div className="tabla-pie">
           <span>{num(filas.length)} filas</span>
-          <button className="boton" onClick={() => descargarCsv(nombreCsv, ordenadas, columnas)}>Descargar CSV</button>
+          {puede('exportar.csv') ? (
+            <button className="boton" onClick={() => descargarCsv(nombreCsv, ordenadas, columnas)}>Descargar CSV</button>
+          ) : visible('exportar.csv') ? (
+            <span className="boton boton-bloqueado" title={`Descargar CSV: disponible en el plan ${nombreNivel(nivelDe('exportar.csv'))}`}>
+              <Candado /> Descargar CSV
+            </span>
+          ) : null}
         </div>
       )}
     </>
@@ -219,15 +228,20 @@ const PRESETS: [string, string][] = [
   ['todo', 'Todo'],
 ];
 
-export function SelectorRango({ rango, preset, onCambio }: { rango: Rango; preset: string; onCambio: (r: Rango, preset: string) => void }) {
+export function SelectorRango({ rango, preset, onCambio, minimo }: { rango: Rango; preset: string; onCambio: (r: Rango, preset: string) => void; minimo?: string | null }) {
   return (
     <div className="rango">
       {PRESETS.map(([k, t]) => (
         <button key={k} className={preset === k ? 'activo' : ''} onClick={() => onCambio(rangoPreset(k), k)}>{t}</button>
       ))}
-      <input type="date" value={rango.desde} max={rango.hasta} onChange={(e) => e.target.value && onCambio({ ...rango, desde: e.target.value }, 'custom')} aria-label="Desde" />
+      <input type="date" value={rango.desde} min={minimo ?? undefined} max={rango.hasta} onChange={(e) => e.target.value && onCambio({ ...rango, desde: e.target.value }, 'custom')} aria-label="Desde" />
       <span style={{ color: 'var(--muted)' }}>a</span>
       <input type="date" value={rango.hasta} min={rango.desde} onChange={(e) => e.target.value && onCambio({ ...rango, hasta: e.target.value }, 'custom')} aria-label="Hasta" />
+      {minimo && (
+        <span className="historial" title="El historial consultable depende del plan">
+          <Candado /> Historial desde el {minimo.split('-').reverse().join('/')}
+        </span>
+      )}
     </div>
   );
 }

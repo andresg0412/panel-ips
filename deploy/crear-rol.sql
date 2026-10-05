@@ -23,3 +23,6 @@ GRANT SELECT ON lista_espera, cupos_liberados, ofertas_cupo,
 -- Oleada 2 (2026-10-04): ocupación de agenda (horarios vigentes) y ejecuciones de campañas
 -- (filas resumen EJECUCION_* que bi.fact_eventos excluye; el resto del contenido ya es visible en bi).
 GRANT SELECT ON horariosequipo, chat_stats TO panel_lectura;
+
+-- Etapa 1 (2026-10-04): el vigilante de soporte revisa la tabla de migraciones del backend.
+GRANT SELECT ON migrations TO panel_lectura;

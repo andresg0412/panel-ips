@@ -6,6 +6,7 @@ import { Estado, Kpi, Tabla, Tarjeta, type Columna } from '../components/ui';
 import { DIAS, etiqueta, fecha, num, pct } from '../format';
 import { useSombras } from '../incidentes';
 import { DemandaChatbot } from './ChatbotDemanda';
+import { Restringido, useAcceso } from '../acceso';
 
 type Conteo = { clave: string; n: number };
 interface Datos {
@@ -53,7 +54,8 @@ const COLS_PASO: Columna<Paso>[] = [
 export default function Chatbot({ rango }: { rango: Rango }) {
   const { data, error, cargando } = useApi<Datos>(conRango('/api/chatbot', rango), 60_000);
   const [flujo, setFlujo] = useState('agendar');
-  const embudo = useApi<{ pasos: Paso[]; datosDesde: string | null }>(conRango('/api/chatbot/embudo', rango, { flujo }), 120_000);
+  const { puede } = useAcceso();
+  const embudo = useApi<{ pasos: Paso[]; datosDesde: string | null }>(puede('chatbot.embudo') ? conRango('/api/chatbot/embudo', rango, { flujo }) : null, 120_000);
   const sombras = useSombras(['conversaciones']);
 
   const optSerie = useCallback(
@@ -140,7 +142,10 @@ export default function Chatbot({ rango }: { rango: Rango }) {
           </Tarjeta>
         </>
       )}
-      <DemandaChatbot rango={rango} />
+      <Restringido clave="chatbot.demanda" titulo="Demanda que el bot no convierte y mensajes no entendidos">
+        <DemandaChatbot rango={rango} />
+      </Restringido>
+      <Restringido clave="chatbot.embudo" titulo="Recorrido paso a paso">
       <Tarjeta
         titulo="Recorrido paso a paso"
         ayuda={embudo.data?.datosDesde ? `Dónde se quedan los pacientes dentro de un trámite. Datos detallados desde el ${fecha(embudo.data.datosDesde)}.` : 'Dónde se quedan los pacientes dentro de un trámite.'}
@@ -153,6 +158,7 @@ export default function Chatbot({ rango }: { rango: Rango }) {
         <Estado cargando={embudo.cargando} error={embudo.error} hayDatos={!!embudo.data} />
         {embudo.data && <Tabla filas={embudo.data.pasos} columnas={COLS_PASO} nombreCsv={`recorrido_${flujo}`} vacio="Sin conversaciones de este trámite en el período" />}
       </Tarjeta>
+      </Restringido>
     </>
   );
 }

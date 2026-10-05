@@ -1,8 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { conCache } from '../cache.js';
+import { claveCache } from '../acceso.js';
 import { leerRango, sumarDias } from '../params.js';
-import { INCIDENTES } from '../incidentes.js';
+import { incidentes } from '../incidentes.js';
 import { CITAS, MESES, PERIODOS, periodo } from '../sql.js';
 
 // Conversación fuera del horario de recepción: antes de las 7, desde las 19 o en domingo.
@@ -71,7 +72,7 @@ async function indicadores(desde: string, hasta: string) {
 
 /** Fracción de días del rango que cae en un incidente que afecta a las métricas del resumen. */
 function fraccionEnIncidente(desde: string, hasta: string): number {
-  const inc = INCIDENTES.filter((i) => i.area !== 'trazabilidad');
+  const inc = incidentes().filter((i) => i.area !== 'trazabilidad');
   let total = 0;
   let malos = 0;
   for (let d = desde; d <= hasta; d = sumarDias(d, 1)) {
@@ -100,7 +101,7 @@ function periodoComparacion(r: { desde: string; hasta: string; prevDesde: string
 export default async function rutasResumen(app: FastifyInstance) {
   app.get('/api/resumen', async (req) => {
     const r = leerRango(req.query as Record<string, unknown>);
-    return conCache(req.url, async () => {
+    return conCache(claveCache(req), async () => {
       const comp = periodoComparacion(r);
       const [actual, anterior] = await Promise.all([
         indicadores(r.desde, r.hasta),
@@ -113,7 +114,7 @@ export default async function rutasResumen(app: FastifyInstance) {
   app.get('/api/resumen/series', async (req) => {
     const r = leerRango(req.query as Record<string, unknown>);
     const p = [r.desde, r.hasta, r.grano];
-    return conCache(req.url, async () => {
+    return conCache(claveCache(req), async () => {
       const [citas, envios, sesiones] = await Promise.all([
         query(
           `WITH ${CITAS}, p AS (${PERIODOS})
@@ -160,7 +161,7 @@ export default async function rutasResumen(app: FastifyInstance) {
   // RES-02: citas atendidas por mes y especialidad desde el inicio de los datos (no depende del rango).
   app.get('/api/resumen/tendencia', async (req) =>
     conCache(
-      req.url,
+      claveCache(req),
       async () => {
         const filas = await query(
           `WITH ${CITAS}, m AS (${MESES})

@@ -1,7 +1,7 @@
 // Fragmentos SQL compartidos. Todo sale del esquema `bi` (vistas de reportería de proyecto-ips,
 // migración 030) y de unas pocas tablas de lista de espera con SELECT explícito al rol panel_lectura.
 // Definiciones: docs/catalogo-analitica.md (TR-02, TR-03, sección 5 `bi.fact_citas_enriquecida`).
-import { INCIDENTES } from './incidentes.js';
+import { incidentes } from './incidentes.js';
 
 /** Fecha de hoy en Bogotá. */
 export const HOY = `(now() AT TIME ZONE 'America/Bogota')::date`;
@@ -22,10 +22,17 @@ export const GRUPO_ESTADO = `
     ELSE 'Otro'
   END`;
 
-/** Rangos de fechas de los incidentes de agenda, como VALUES para SQL (fechas fijas, sin parámetros). */
-const RANGOS_AGENDA = INCIDENTES.filter((i) => i.area === 'agenda' || i.area === 'general')
-  .map((i) => `(DATE '${i.desde}', DATE '${i.hasta}')`)
-  .join(', ');
+/**
+ * Rangos de fechas de los incidentes de agenda, como VALUES para SQL (fechas fijas, sin parámetros). Se calcula
+ * una vez al cargar el módulo, después de leer panel.incidentes (index.ts importa las rutas tras esa lectura):
+ * un incidente de agenda editado en la consola afecta a este cálculo al reiniciar el panel.
+ */
+// Sin incidentes de agenda, un rango imposible: VALUES no admite una lista vacía.
+const RANGOS_AGENDA =
+  incidentes()
+    .filter((i) => (i.area === 'agenda' || i.area === 'general') && /^\d{4}-\d{2}-\d{2}$/.test(i.desde) && /^\d{4}-\d{2}-\d{2}$/.test(i.hasta))
+    .map((i) => `(DATE '${i.desde}', DATE '${i.hasta}')`)
+    .join(', ') || `(DATE '1900-01-01', DATE '1900-01-01')`;
 
 /**
  * CTE `citas`: bi.fact_citas enriquecida con la clasificación del catálogo analítico.

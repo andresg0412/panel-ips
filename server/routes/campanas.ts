@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { conCache } from '../cache.js';
+import { claveCache } from '../acceso.js';
 import { ErrorParametro, leerPagina, leerRango, leerTexto } from '../params.js';
 import { PERIODOS, periodo } from '../sql.js';
 
@@ -11,7 +12,7 @@ export default async function rutasCampanas(app: FastifyInstance) {
   app.get('/api/campanas', async (req) => {
     const r = leerRango(req.query as Record<string, unknown>);
     const p = [r.desde, r.hasta, r.grano];
-    return conCache(req.url, async () => {
+    return conCache(claveCache(req), async () => {
       const [porCampana, serie, entregaDesde] = await Promise.all([
         // CAM-01: "confirmó" = respondió "confirmo" al mensaje o la cita pasó a Confirmado después del envío.
         // Antes se usaba solo el historial de estados, que existe desde el 30-sep-2026 y dejaba el histórico en 0.
@@ -57,7 +58,7 @@ export default async function rutasCampanas(app: FastifyInstance) {
   // CAM-06: % acumulado de envíos respondidos (y leídos) según las horas transcurridas desde el envío.
   app.get('/api/campanas/tiempos', async (req) => {
     const r = leerRango(req.query as Record<string, unknown>);
-    return conCache(req.url, async () => {
+    return conCache(claveCache(req), async () => {
       const [respuesta, lectura] = await Promise.all([
         query(
           `WITH base AS (
@@ -91,7 +92,7 @@ export default async function rutasCampanas(app: FastifyInstance) {
   // CAM-08: errores de entrega del período y calidad de los teléfonos de los pacientes (estado actual).
   app.get('/api/campanas/calidad', async (req) => {
     const r = leerRango(req.query as Record<string, unknown>);
-    return conCache(req.url, async () => {
+    return conCache(claveCache(req), async () => {
       const [errores, telefonos, compartidos] = await Promise.all([
         query(
           `SELECT coalesce(error_code, '') AS codigo, coalesce(error_titulo, 'Sin detalle (rechazado por la API)') AS error,
@@ -138,7 +139,7 @@ export default async function rutasCampanas(app: FastifyInstance) {
     const where = `fecha_bogota BETWEEN $1 AND $2 AND tipo_envio = 'plantilla'
                    AND ($3::text IS NULL OR campana = $3) AND ($4::text IS NULL OR estado_respuesta = $4)`;
     const p = [r.desde, r.hasta, campana, respuesta];
-    return conCache(req.url, async () => {
+    return conCache(claveCache(req), async () => {
       const [filas, total] = await Promise.all([
         query(
           `SELECT aceptado_at_bogota AS enviado, campana, plantilla, nombre_paciente, documento_paciente, telefono_norm,

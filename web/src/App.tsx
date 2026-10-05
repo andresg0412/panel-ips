@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { RefrescoCtx, useApi, type Rango } from './api';
+import { useEffect, useState, type ComponentType } from 'react';
+import { RefrescoCtx, cambiarVistaPrevia, registrar, useApi, type Rango } from './api';
 import { SelectorRango, rangoPreset } from './components/ui';
 import Resumen from './pages/Resumen';
 import Campanas from './pages/Campanas';
@@ -10,20 +10,35 @@ import Pacientes from './pages/Pacientes';
 import Alertas from './pages/Alertas';
 import Marketing from './pages/Marketing';
 import Profesionales from './pages/Profesionales';
+import MiPlan from './pages/MiPlan';
+import Soporte from './pages/Soporte';
 import { IncidentesCtx, type Incidente } from './incidentes';
+import { AccesoCtx, Bloqueado, Candado, type Yo } from './acceso';
 import { fecha } from './format';
 
-const PAGINAS = [
-  { ruta: 'resumen', titulo: 'Resumen', desc: 'Lo más importante del período', Comp: Resumen, conRango: true },
-  { ruta: 'campanas', titulo: 'Campañas', desc: 'Mensajes automáticos de WhatsApp y sus resultados', Comp: Campanas, conRango: true },
-  { ruta: 'agenda', titulo: 'Agenda', desc: 'Citas por estado, profesional y especialidad', Comp: Agenda, conRango: true },
-  { ruta: 'profesionales', titulo: 'Profesionales', desc: 'Agenda, asistencia y continuidad de cada profesional', Comp: Profesionales, conRango: true },
-  { ruta: 'chatbot', titulo: 'Chatbot', desc: 'Conversaciones con el asistente de WhatsApp', Comp: Chatbot, conRango: true },
-  { ruta: 'lista-espera', titulo: 'Lista de espera', desc: 'Inscripciones, cupos liberados y ofertas', Comp: ListaEspera, conRango: true },
-  { ruta: 'pacientes', titulo: 'Pacientes', desc: 'Quiénes son, cuántos llegan y cada cuánto vuelven', Comp: Pacientes, conRango: true },
-  { ruta: 'marketing', titulo: 'Marketing', desc: 'Alcance de WhatsApp y pacientes para invitar a volver', Comp: Marketing, conRango: false },
-  { ruta: 'alertas', titulo: 'Alertas', desc: 'Lo que requiere atención y la salud de los datos', Comp: Alertas, conRango: true },
-] as const;
+interface Pagina {
+  ruta: string;
+  titulo: string;
+  desc: string;
+  Comp: ComponentType<{ rango: Rango }>;
+  conRango: boolean;
+  /** Función principal: decide el plan que se muestra cuando la página entera está bloqueada. */
+  funcion: string;
+}
+
+const PAGINAS: Pagina[] = [
+  { ruta: 'resumen', titulo: 'Resumen', desc: 'Lo más importante del período', Comp: Resumen, conRango: true, funcion: 'resumen.kpis' },
+  { ruta: 'campanas', titulo: 'Campañas', desc: 'Mensajes automáticos de WhatsApp y sus resultados', Comp: Campanas, conRango: true, funcion: 'campanas.resultados' },
+  { ruta: 'agenda', titulo: 'Agenda', desc: 'Citas por estado, profesional y especialidad', Comp: Agenda, conRango: true, funcion: 'agenda.periodo' },
+  { ruta: 'profesionales', titulo: 'Profesionales', desc: 'Agenda, asistencia y continuidad de cada profesional', Comp: Profesionales, conRango: true, funcion: 'profesionales.lista' },
+  { ruta: 'chatbot', titulo: 'Chatbot', desc: 'Conversaciones con el asistente de WhatsApp', Comp: Chatbot, conRango: true, funcion: 'chatbot.conversaciones' },
+  { ruta: 'lista-espera', titulo: 'Lista de espera', desc: 'Inscripciones, cupos liberados y ofertas', Comp: ListaEspera, conRango: true, funcion: 'listaEspera.inscritos' },
+  { ruta: 'pacientes', titulo: 'Pacientes', desc: 'Quiénes son, cuántos llegan y cada cuánto vuelven', Comp: Pacientes, conRango: true, funcion: 'pacientes.panorama' },
+  { ruta: 'marketing', titulo: 'Marketing', desc: 'Alcance de WhatsApp y pacientes para invitar a volver', Comp: Marketing, conRango: false, funcion: 'marketing.alcance' },
+  { ruta: 'alertas', titulo: 'Alertas', desc: 'Lo que requiere atención y la salud de los datos', Comp: Alertas, conRango: true, funcion: 'alertas.panel' },
+  { ruta: 'plan', titulo: 'Mi plan', desc: 'Lo que incluye cada plan del panel', Comp: MiPlan, conRango: false, funcion: 'plan.ver' },
+  { ruta: 'soporte', titulo: 'Soporte', desc: 'Salud técnica del sistema, licencia, usuarios y actividad', Comp: Soporte, conRango: false, funcion: '' },
+];
 
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -50,12 +65,13 @@ function guardarAlmacen(clave: string, valor: string) {
 
 /**
  * La URL guarda la pantalla y el período (#/campanas?p=30d o #/campanas?desde=..&hasta=..),
- * así un enlace copiado abre exactamente la misma vista.
+ * así un enlace copiado abre exactamente la misma vista. Una ruta vacía o desconocida queda en '' y se
+ * resuelve con la pantalla de inicio del rol.
  */
 function leerUrl(): Estado {
   const [rutaCruda, query = ''] = location.hash.replace(/^#\/?/, '').split('?');
   const destino = rutaCruda === 'sistema' ? 'alertas' : rutaCruda;
-  const ruta = PAGINAS.some((p) => p.ruta === destino) ? destino : 'resumen';
+  const ruta = PAGINAS.some((p) => p.ruta === destino) ? destino : '';
   const q = new URLSearchParams(query);
   const desde = q.get('desde');
   const hasta = q.get('hasta');
@@ -65,6 +81,7 @@ function leerUrl(): Estado {
 }
 
 function escribirUrl(e: Estado) {
+  if (!e.ruta) return;
   const pestana = new URLSearchParams(location.hash.split('?')[1] ?? '').get('t');
   const [rutaActual] = location.hash.replace(/^#\/?/, '').split('?');
   const t = pestana && rutaActual === e.ruta ? `&t=${pestana}` : '';
@@ -82,14 +99,52 @@ function aplicarTema(t: Tema) {
 
 const horaActual = () => new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' });
 
+/** El rango no puede empezar antes del historial que permite el plan. */
+function recortarRango(r: Rango, minimo: string | null): Rango {
+  if (!minimo) return r;
+  const desde = r.desde < minimo ? minimo : r.desde;
+  const hasta = r.hasta < minimo ? minimo : r.hasta;
+  return { desde, hasta };
+}
+
 export default function App() {
+  const yo = useApi<Yo>('/api/yo');
+
+  if (yo.error && !yo.data) return <div className="pantalla-centro"><div className="error">No se pudo cargar el panel: {yo.error}</div></div>;
+  if (!yo.data) return <div className="pantalla-centro"><div className="cargando">Cargando…</div></div>;
+  if (!yo.data.habilitado) {
+    return (
+      <div className="pantalla-centro">
+        <section className="card" style={{ maxWidth: 460 }}>
+          <h3>Centro de Orientación · Panel de reportes</h3>
+          <p>{yo.data.mensaje}</p>
+          {yo.data.usuario && <p className="ayuda">Usuario: {yo.data.usuario}</p>}
+        </section>
+      </div>
+    );
+  }
+  return (
+    <AccesoCtx.Provider value={yo.data}>
+      <Panel yo={yo.data} />
+    </AccesoCtx.Provider>
+  );
+}
+
+function Panel({ yo }: { yo: Yo }) {
   const [estado, setEstado] = useState<Estado>(leerUrl);
   const [tema, setTema] = useState<Tema>(() => (leerAlmacen('panel.tema') as Tema) || 'auto');
   const [refresco, setRefresco] = useState(0);
   const [horaDatos, setHoraDatos] = useState(horaActual);
-  const yo = useApi<{ usuario: string | null }>('/api/yo');
   const incidentes = useApi<{ incidentes: Incidente[] }>('/api/incidentes');
-  const alertas = useApi<{ n: number }>('/api/alertas/conteo', 60_000);
+  const verAlertas = yo.funciones['alertas.conteo']?.ok;
+  const alertas = useApi<{ n: number }>(verAlertas ? '/api/alertas/conteo' : null, 60_000);
+  const esSoporte = yo.rolReal === 'soporte';
+  const soporte = useApi<{ n: number; altas: number }>(esSoporte ? '/api/soporte/conteo' : null, 60_000);
+
+  const estadoPagina = (ruta: string) => (ruta === 'soporte' ? (esSoporte ? 'ok' : 'oculta') : yo.paginas[ruta]?.estado ?? 'oculta');
+  const visibles = PAGINAS.filter((p) => estadoPagina(p.ruta) !== 'oculta');
+  const rutaInicio = visibles.find((p) => p.ruta === yo.inicio)?.ruta ?? visibles[0]?.ruta ?? 'plan';
+  const ruta = estado.ruta && estadoPagina(estado.ruta) !== 'oculta' ? estado.ruta : rutaInicio;
 
   useEffect(() => {
     const fn = () => setEstado(leerUrl());
@@ -97,7 +152,8 @@ export default function App() {
     return () => window.removeEventListener('hashchange', fn);
   }, []);
 
-  useEffect(() => escribirUrl(estado), [estado]);
+  useEffect(() => escribirUrl({ ...estado, ruta }), [estado, ruta]);
+  useEffect(() => registrar('visita', ruta), [ruta]);
 
   useEffect(() => {
     aplicarTema(tema);
@@ -132,8 +188,10 @@ export default function App() {
     setTimeout(() => window.print(), 400);
   };
 
-  const pagina = PAGINAS.find((p) => p.ruta === estado.ruta)!;
+  const pagina = PAGINAS.find((p) => p.ruta === ruta)!;
+  const bloqueada = estadoPagina(ruta) === 'bloqueada';
   const { Comp } = pagina;
+  const rango = recortarRango(estado.rango, yo.historialDesde);
   const sufijo = estado.preset === 'custom' ? `?desde=${estado.rango.desde}&hasta=${estado.rango.hasta}` : `?p=${estado.preset}`;
 
   return (
@@ -143,14 +201,21 @@ export default function App() {
         <nav className="nav">
           <h1>Centro de Orientación</h1>
           <p className="sub">Panel de reportes</p>
-          {PAGINAS.map((p) => (
-            <a key={p.ruta} href={`#/${p.ruta}${sufijo}`} className={p.ruta === estado.ruta ? 'activo' : ''}>
-              {p.titulo}
-              {p.ruta === 'alertas' && (alertas.data?.n ?? 0) > 0 && (
-                <span className="insignia" title={`${alertas.data!.n} alertas activas`}>{alertas.data!.n}</span>
-              )}
-            </a>
-          ))}
+          {visibles.map((p) => {
+            const candado = estadoPagina(p.ruta) === 'bloqueada';
+            return (
+              <a key={p.ruta} href={`#/${p.ruta}${sufijo}`} className={`${p.ruta === ruta ? 'activo' : ''}${candado ? ' con-candado' : ''}`}>
+                {p.titulo}
+                {candado && <Candado titulo={`Disponible en el plan ${yo.niveles[yo.paginas[p.ruta].nivel]}`} />}
+                {p.ruta === 'alertas' && (alertas.data?.n ?? 0) > 0 && (
+                  <span className="insignia" title={`${alertas.data!.n} alertas activas`}>{alertas.data!.n}</span>
+                )}
+                {p.ruta === 'soporte' && (soporte.data?.n ?? 0) > 0 && (
+                  <span className={`insignia${soporte.data!.altas ? '' : ' insignia-media'}`} title={`${soporte.data!.n} alertas técnicas activas`}>{soporte.data!.n}</span>
+                )}
+              </a>
+            );
+          })}
           <div className="pie">
             <label>
               Tema{' '}
@@ -160,26 +225,41 @@ export default function App() {
                 <option value="dark">Oscuro</option>
               </select>
             </label>
-            {yo.data?.usuario && <span>Sesión: {yo.data.usuario}</span>}
+            {yo.usuario && (
+              <span>
+                {yo.nombre ?? yo.usuario} · {yo.rolNombre}
+              </span>
+            )}
+            {yo.paginas.plan?.estado === 'ok' && (
+              <a href={`#/plan${sufijo}`} className="enlace-plan">Plan {yo.nivelNombre}</a>
+            )}
           </div>
         </nav>
         <main>
+          {yo.vistaPrevia && (
+            <div className="vista-previa">
+              <span>
+                Vista previa (solo usted la ve): plan <b>{yo.nivelNombre}</b>, rol <b>{yo.rolNombre}</b>.
+              </span>
+              <button className="boton" onClick={() => cambiarVistaPrevia(null)}>Salir de la vista previa</button>
+            </div>
+          )}
           <div
             className="cabecera"
-            data-impreso={`Período: ${fecha(estado.rango.desde)} a ${fecha(estado.rango.hasta)} · Generado el ${new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })}`}
+            data-impreso={`Período: ${fecha(rango.desde)} a ${fecha(rango.hasta)} · Generado el ${new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })}`}
           >
             <div>
               <h2>{pagina.titulo}</h2>
               <p>{pagina.desc}</p>
             </div>
-            {pagina.conRango && <SelectorRango rango={estado.rango} preset={estado.preset} onCambio={cambiarRango} />}
+            {pagina.conRango && !bloqueada && <SelectorRango rango={rango} preset={estado.preset} onCambio={cambiarRango} minimo={yo.historialDesde} />}
           </div>
           <div className="herramientas" style={{ marginTop: -8, marginBottom: 16 }}>
             <span>Datos de las {horaDatos} · se actualizan solos</span>
             <button onClick={actualizar}>Actualizar ahora</button>
             <button onClick={imprimir}>Imprimir / PDF</button>
           </div>
-          <Comp rango={estado.rango} />
+          {bloqueada ? <Bloqueado clave={pagina.funcion} titulo={pagina.titulo} alto={320} /> : <Comp rango={rango} />}
         </main>
       </div>
       </IncidentesCtx.Provider>

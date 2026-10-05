@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { conCache } from '../cache.js';
+import { claveCache } from '../acceso.js';
 import { ErrorParametro, leerRango, leerTexto } from '../params.js';
 import { PERIODOS, periodo } from '../sql.js';
 import { FUERA_HORARIO } from './resumen.js';
@@ -11,7 +12,7 @@ export default async function rutasChatbot(app: FastifyInstance) {
   app.get('/api/chatbot', async (req) => {
     const r = leerRango(req.query as Record<string, unknown>);
     const p = [r.desde, r.hasta];
-    return conCache(req.url, async () => {
+    return conCache(claveCache(req), async () => {
       const [kpis, serie, resultado, primerFlujo, motivoFin, mapaCalor, conversion] = await Promise.all([
         queryOne(
           `SELECT count(*) AS sesiones,
@@ -86,7 +87,7 @@ export default async function rutasChatbot(app: FastifyInstance) {
     const r = leerRango(q);
     const flujo = leerTexto(q, 'flujo', 40) ?? 'agendar';
     if (!FLUJOS_EMBUDO.has(flujo)) throw new ErrorParametro('Flujo inválido');
-    return conCache(req.url, async () => {
+    return conCache(claveCache(req), async () => {
       const [pasos, desde] = await Promise.all([
         query(
           `SELECT e.paso, min(e.orden) AS orden, bool_or(e.es_final) AS es_final,

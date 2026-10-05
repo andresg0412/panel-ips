@@ -5,6 +5,7 @@ import { barrasApiladas, barrasTasa, ranking } from '../components/series';
 import { Estado, Kpi, Tabla, Tarjeta, type Columna } from '../components/ui';
 import { useSombras } from '../incidentes';
 import OcupacionProfesionales from './Ocupacion';
+import { Bloqueado, Restringido, useAcceso } from '../acceso';
 import { DIAS, etiqueta, num, pct, ratio } from '../format';
 
 interface FilaProfesional {
@@ -69,7 +70,11 @@ const COLUMNAS: Columna<FilaProfesional>[] = [
 export default function Profesionales({ rango }: { rango: Rango }) {
   const lista = useApi<{ filas: FilaProfesional[] }>(conRango('/api/profesionales', rango), 120_000);
   const [elegido, setElegido] = useState<string | null>(null);
-  const ficha = useApi<Ficha>(elegido ? conRango('/api/profesionales/ficha', rango, { nombre: elegido }) : null, 120_000);
+  const { puede } = useAcceso();
+  const verFicha = puede('profesionales.ficha');
+  // La retención por profesional es del plan Full: sin ella, la columna no se muestra.
+  const columnas = puede('profesionales.capacidad') ? COLUMNAS : COLUMNAS.filter((c) => c.clave !== 'volvieron');
+  const ficha = useApi<Ficha>(elegido && verFicha ? conRango('/api/profesionales/ficha', rango, { nombre: elegido }) : null, 120_000);
   const sombras = useSombras(['agenda']);
 
   const optMensual = useCallback(() => {
@@ -93,7 +98,9 @@ export default function Profesionales({ rango }: { rango: Rango }) {
 
   return (
     <>
-      <OcupacionProfesionales rango={rango} />
+      <Restringido clave="profesionales.ocupacion" titulo="Ocupación de la agenda">
+        <OcupacionProfesionales rango={rango} />
+      </Restringido>
       <Tarjeta
         titulo="Profesionales"
         ayuda={
@@ -106,7 +113,7 @@ export default function Profesionales({ rango }: { rango: Rango }) {
         <Estado cargando={lista.cargando} error={lista.error} hayDatos={!!lista.data} />
         {lista.data && (
           <>
-            <Tabla filas={lista.data.filas} columnas={COLUMNAS} nombreCsv={`profesionales_${rango.desde}_${rango.hasta}`} alFila={(f) => setElegido(f.nombre)} />
+            <Tabla filas={lista.data.filas} columnas={columnas} nombreCsv={`profesionales_${rango.desde}_${rango.hasta}`} alFila={(f) => setElegido(f.nombre)} />
             {sinMaestro > 0 && (
               <p className="nota">
                 {sinMaestro} profesionales no están en el maestro de equipo del sistema; sus citas se agrupan por nombre. Vuelven a 2.ª cita: pacientes cuya primera
@@ -117,7 +124,8 @@ export default function Profesionales({ rango }: { rango: Rango }) {
         )}
       </Tarjeta>
 
-      {elegido && (
+      {elegido && !verFicha && <Bloqueado clave="profesionales.ficha" titulo={`Ficha de ${elegido}`} />}
+      {elegido && verFicha && (
         <>
           <Estado cargando={ficha.cargando} error={ficha.error} hayDatos={!!ficha.data} />
           {ficha.data && k && (

@@ -4,6 +4,7 @@ import Grafico, { token } from '../components/Grafico';
 import { mapaCalor } from '../components/series';
 import { descargarCsv, Estado, Kpi, Tarjeta, type Columna } from '../components/ui';
 import { fecha, mesCorto, num, pct, tasaTxt } from '../format';
+import { useAcceso } from '../acceso';
 
 interface Ciclo {
   cohortes: { cohorte: string; k: number; n: number }[];
@@ -81,6 +82,7 @@ export default function PacientesRetencion() {
     return opt;
   }, [tabla, data]);
 
+  const { puede } = useAcceso();
   const exportar = async () => {
     setExportando(true);
     try {
@@ -100,9 +102,11 @@ export default function PacientesRetencion() {
             titulo="¿A quién estamos perdiendo?"
             ayuda="Pacientes atendidos desde agosto de 2025, según su última atención. Activo: volvió dentro de su ritmo habitual. En riesgo: lleva más de lo normal sin venir (hasta 4 meses). Inactivo: más de 4 meses."
             accion={
-              <button className="boton" disabled={exportando || est('en_riesgo') === 0} onClick={exportar}>
-                {exportando ? 'Preparando…' : 'Descargar pacientes en riesgo'}
-              </button>
+              puede('exportar.personales') ? (
+                <button className="boton" disabled={exportando || est('en_riesgo') === 0} onClick={exportar}>
+                  {exportando ? 'Preparando…' : 'Descargar pacientes en riesgo'}
+                </button>
+              ) : undefined
             }
           >
             <div className="kpis" style={{ marginBottom: 0 }}>

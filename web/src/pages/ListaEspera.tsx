@@ -4,6 +4,7 @@ import Grafico from '../components/Grafico';
 import { embudo } from '../components/series';
 import { Estado, Kpi, ListaConteo, Tabla, Tarjeta, type Columna } from '../components/ui';
 import { etiqueta, fecha, fechaHora, hora, num } from '../format';
+import { Bloqueado, Restringido, useAcceso } from '../acceso';
 
 type Conteo = { clave: string; n: number };
 interface Cupo {
@@ -92,6 +93,9 @@ const COLS_EJEC: Columna<Ejecucion>[] = [
 
 export default function ListaEspera({ rango }: { rango: Rango }) {
   const { data, error, cargando } = useApi<Datos>(conRango('/api/lista-espera', rango), 60_000);
+  const { puede } = useAcceso();
+  const detalle = puede('listaEspera.detalle');
+  const invitaciones = puede('listaEspera.invitaciones');
 
   const optEmbudo = useCallback(() => {
     const e = data!.embudo;
@@ -111,12 +115,19 @@ export default function ListaEspera({ rango }: { rango: Rango }) {
         <>
           <div className="kpis">
             <Kpi etiqueta="Inscritos activos hoy" actual={de(data.inscripcionesHoy, 'activa')} />
-            <Kpi etiqueta="Nuevas inscripciones" actual={suma(data.inscripciones)} />
-            <Kpi etiqueta="Cupos liberados" actual={suma(data.cupos)} />
-            <Kpi etiqueta="Ofertas enviadas" actual={suma(data.ofertas)} />
-            <Kpi etiqueta="Ofertas aceptadas" actual={de(data.ofertas, 'aceptada')} />
-            <Kpi etiqueta="Invitaciones a inscribirse" actual={suma(data.invitaciones)} />
+            {detalle && (
+              <>
+                <Kpi etiqueta="Nuevas inscripciones" actual={suma(data.inscripciones)} />
+                <Kpi etiqueta="Cupos liberados" actual={suma(data.cupos)} />
+                <Kpi etiqueta="Ofertas enviadas" actual={suma(data.ofertas)} />
+                <Kpi etiqueta="Ofertas aceptadas" actual={de(data.ofertas, 'aceptada')} />
+              </>
+            )}
+            {invitaciones && <Kpi etiqueta="Invitaciones a inscribirse" actual={suma(data.invitaciones)} />}
           </div>
+          {!detalle && <Bloqueado clave="listaEspera.detalle" titulo="Cupos recuperados, ofertas y motivos" alto={260} />}
+          {detalle && (
+          <>
           <div className="grid g2">
             <Tarjeta
               titulo="De cupo liberado a cita atendida"
@@ -155,6 +166,9 @@ export default function ListaEspera({ rango }: { rango: Rango }) {
           <Tarjeta titulo="Ofertas recientes">
             <Tabla filas={data.ofertasRecientes} columnas={COLS_OFERTA} nombreCsv="ofertas_cupo" />
           </Tarjeta>
+          </>
+          )}
+          <Restringido clave="listaEspera.invitaciones" titulo="Campañas de invitación a la lista de espera">
           <Tarjeta titulo="Invitaciones a la lista de espera" ayuda="Respuesta de los pacientes invitados a inscribirse, por tipo de campaña.">
             {data.invitacionesPorTipo.length ? (
               <ListaConteo
@@ -168,6 +182,7 @@ export default function ListaEspera({ rango }: { rango: Rango }) {
           <Tarjeta titulo="Ejecuciones de la campaña de invitación" ayuda="Envíos que invitan a pacientes con citas lejanas a inscribirse en la lista de espera.">
             <Tabla filas={data.ejecuciones} columnas={COLS_EJEC} nombreCsv="invitaciones" vacio="Aún no se han ejecutado campañas de invitación en este período" />
           </Tarjeta>
+          </Restringido>
         </>
       )}
     </>

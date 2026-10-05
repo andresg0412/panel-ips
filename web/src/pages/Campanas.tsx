@@ -3,6 +3,7 @@ import { conRango, getJson, useApi, type Rango } from '../api';
 import Grafico from '../components/Grafico';
 import { barrasApiladas, lineas, pivotar } from '../components/series';
 import { Pestanas, usePestana, useSombras } from '../incidentes';
+import { Bloqueado, Restringido, useAcceso } from '../acceso';
 import CampanasEfecto, { CalendarioEjecuciones } from './CampanasEfecto';
 import { descargarCsv, Estado, Tabla, Tarjeta, type Columna } from '../components/ui';
 import { etiqueta, fecha, fechaHora, hora, num, pct, ratio, tasaTxt } from '../format';
@@ -129,8 +130,10 @@ const TAM = 50;
 
 function CampanasResultados({ rango }: { rango: Rango }) {
   const { data, error, cargando } = useApi<Datos>(conRango('/api/campanas', rango), 60_000);
-  const tiempos = useApi<Tiempos>(conRango('/api/campanas/tiempos', rango), 120_000);
-  const calidad = useApi<Calidad>(conRango('/api/campanas/calidad', rango), 300_000);
+  const { puede } = useAcceso();
+  const exportarPersonales = puede('exportar.personales');
+  const tiempos = useApi<Tiempos>(puede('campanas.tiempos') ? conRango('/api/campanas/tiempos', rango) : null, 120_000);
+  const calidad = useApi<Calidad>(puede('campanas.calidad') ? conRango('/api/campanas/calidad', rango) : null, 300_000);
   const sombras = useSombras(['whatsapp', 'trazabilidad']);
   const [exportandoTel, setExportandoTel] = useState(false);
   const [campana, setCampana] = useState('');
@@ -140,7 +143,7 @@ function CampanasResultados({ rango }: { rango: Rango }) {
 
   const filtros = { campana, respuesta };
   const urlEnvios = conRango('/api/campanas/envios', rango, { ...filtros, pagina, tam: TAM });
-  const envios = useApi<{ filas: Envio[]; total: number }>(urlEnvios, 60_000);
+  const envios = useApi<{ filas: Envio[]; total: number }>(puede('campanas.detalle') ? urlEnvios : null, 60_000);
 
   const grupos = useMemo(() => {
     const presentes = new Set((data?.serie ?? []).map((s) => s.campana).filter(Boolean) as string[]);
@@ -219,6 +222,7 @@ function CampanasResultados({ rango }: { rango: Rango }) {
         </>
       )}
 
+      {!puede('campanas.tiempos') && <Bloqueado clave="campanas.tiempos" titulo="¿Cuánto tardan en leer y responder?" />}
       {tiempos.data && (
         <div className="grid g2">
           <Tarjeta
@@ -250,6 +254,7 @@ function CampanasResultados({ rango }: { rango: Rango }) {
         </div>
       )}
 
+      {!puede('campanas.calidad') && <Bloqueado clave="campanas.calidad" titulo="Errores de envío y calidad de los teléfonos" />}
       {calidad.data && (
         <div className="grid g2">
           <Tarjeta titulo="Errores de envío" ayuda="Mensajes que WhatsApp no entregó en el período, por motivo.">
@@ -259,9 +264,11 @@ function CampanasResultados({ rango }: { rango: Rango }) {
             titulo="Calidad de los teléfonos"
             ayuda="Estado actual. Un paciente sin teléfono válido no recibe recordatorios."
             accion={
-              <button className="boton" disabled={exportandoTel} onClick={exportarTelefonos}>
-                {exportandoTel ? 'Preparando…' : 'Descargar para corregir'}
-              </button>
+              exportarPersonales ? (
+                <button className="boton" disabled={exportandoTel} onClick={exportarTelefonos}>
+                  {exportandoTel ? 'Preparando…' : 'Descargar para corregir'}
+                </button>
+              ) : undefined
             }
           >
             <div className="cifras">
@@ -284,10 +291,11 @@ function CampanasResultados({ rango }: { rango: Rango }) {
       )}
 
 
+      <Restringido clave="campanas.detalle" titulo="Detalle de mensajes">
       <Tarjeta
         titulo="Detalle de mensajes"
         ayuda="Cada mensaje enviado, a quién y qué pasó después."
-        accion={<button className="boton" disabled={exportando || total === 0} onClick={exportar}>{exportando ? 'Preparando…' : 'Descargar CSV (hasta 5.000)'}</button>}
+        accion={exportarPersonales ? <button className="boton" disabled={exportando || total === 0} onClick={exportar}>{exportando ? 'Preparando…' : 'Descargar CSV (hasta 5.000)'}</button> : undefined}
       >
         <div className="filtros">
           <select value={campana} onChange={(e) => (setCampana(e.target.value), setPagina(1))}>
@@ -313,6 +321,7 @@ function CampanasResultados({ rango }: { rango: Rango }) {
           </>
         )}
       </Tarjeta>
+      </Restringido>
     </>
   );
 }
@@ -321,9 +330,12 @@ type VistaCampanas = 'resultados' | 'efecto' | 'ejecuciones';
 
 export default function Campanas({ rango }: { rango: Rango }) {
   const [vista, setVista] = usePestana<VistaCampanas>(['resultados', 'efecto', 'ejecuciones'], 'resultados');
+  const { puede } = useAcceso();
+  const bloqueadas = ([['efecto', 'campanas.efecto'], ['ejecuciones', 'campanas.ejecuciones']] as const).filter(([, f]) => !puede(f)).map(([v]) => v as VistaCampanas);
   return (
     <>
       <Pestanas<VistaCampanas>
+        bloqueadas={bloqueadas}
         opciones={[
           ['resultados', 'Resultados'],
           ['efecto', 'Efecto en las citas'],
@@ -333,8 +345,9 @@ export default function Campanas({ rango }: { rango: Rango }) {
         onCambio={setVista}
       />
       {vista === 'resultados' && <CampanasResultados rango={rango} />}
-      {vista === 'efecto' && <CampanasEfecto rango={rango} />}
-      {vista === 'ejecuciones' && (
+      {vista === 'efecto' && (bloqueadas.includes('efecto') ? <Bloqueado clave="campanas.efecto" titulo="Efecto de las campañas en las citas" alto={280} /> : <CampanasEfecto rango={rango} />)}
+      {vista === 'ejecuciones' && bloqueadas.includes('ejecuciones') && <Bloqueado clave="campanas.ejecuciones" titulo="Ejecuciones de las campañas" alto={280} />}
+      {vista === 'ejecuciones' && !bloqueadas.includes('ejecuciones') && (
         <Tarjeta
           titulo="Ejecuciones de las campañas"
           ayuda="Cada cuadro es una campaña en un día (últimos 35 días del período). Pase el cursor para ver cuántas citas procesó y cuántos mensajes envió."

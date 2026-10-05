@@ -1,11 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { conCache } from '../cache.js';
+import { claveCache } from '../acceso.js';
 
 export default async function rutasSistema(app: FastifyInstance) {
   app.get('/api/sistema', async (req) => {
     return conCache(
-      req.url,
+      claveCache(req),
       async () => {
         const [actividad, campanas, erroresEnvio, erroresBot] = await Promise.all([
           queryOne(
