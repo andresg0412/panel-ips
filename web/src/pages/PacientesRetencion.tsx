@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { getJson, useApi } from '../api';
 import Grafico, { token } from '../components/Grafico';
 import { mapaCalor } from '../components/series';
-import { descargarCsv, Estado, Kpi, Tarjeta, type Columna } from '../components/ui';
+import { confirmarDescargaPersonal, descargarCsv, Estado, Kpi, Tarjeta, type Columna } from '../components/ui';
 import { fecha, mesCorto, num, pct, tasaTxt } from '../format';
 import { useAcceso } from '../acceso';
 
@@ -84,10 +84,11 @@ export default function PacientesRetencion() {
 
   const { puede } = useAcceso();
   const exportar = async () => {
+    if (!confirmarDescargaPersonal('el listado de pacientes en riesgo de abandonar')) return;
     setExportando(true);
     try {
       const d = await getJson<{ filas: EnRiesgo[] }>('/api/pacientes/en-riesgo');
-      descargarCsv('pacientes_en_riesgo', d.filas, COLS_RIESGO);
+      descargarCsv('pacientes_en_riesgo', d.filas, COLS_RIESGO, true);
     } finally {
       setExportando(false);
     }

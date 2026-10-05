@@ -352,6 +352,18 @@ export function instalarAcceso(app: FastifyInstance) {
     if (!req.url.startsWith('/api/') || !req.routeOptions.url) return;
     const clave = `${req.method} ${req.routeOptions.url}`;
     if (SIN_REGISTRO.has(clave) || clave === 'POST /api/actividad') return;
+    const q = req.query as Record<string, unknown>;
+    const personal = ENDPOINTS[clave] === 'exportar.personales' || (clave === 'GET /api/campanas/envios' && Number(q.tam) > TAM_MAX_SIN_EXPORTAR);
+    if (personal && reply.statusCode === 200) {
+      registrarActividad(req.contexto, {
+        tipo: 'exportacion',
+        ruta: clave,
+        detalle: 'Descarga de datos personales de pacientes (registro del servidor)',
+        status: reply.statusCode,
+        ms: Math.round(reply.elapsedTime),
+      });
+      return;
+    }
     registrarActividad(req.contexto, {
       tipo: 'api',
       ruta: clave,

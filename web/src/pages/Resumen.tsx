@@ -11,21 +11,21 @@ import { useMarcas, useSombras } from '../incidentes';
 import { Bloqueado, Restringido, useAcceso } from '../acceso';
 import { fecha, num, ratio, tasaTxt } from '../format';
 
-type N = Record<string, number>;
-interface Indicadores { citas: N; envios: N; sesiones: N; listaEspera: N }
-interface DatosResumen {
+export type N = Record<string, number>;
+export interface Indicadores { citas: N; envios: N; sesiones: N; listaEspera: N }
+export interface DatosResumen {
   actual: Indicadores;
   anterior: Indicadores | null;
   comparacion: { tipo: 'anterior' | 'interanual' | 'ninguna'; desde: string | null; hasta: string | null };
 }
-interface DatosMetas {
+export interface DatosMetas {
   nuevos: { nuevos: number };
   confirmadas: { citas: number; confirmadas: number };
   ocupacion: { cupos: number; ocupan: number };
   capacidadDesde: string;
 }
-interface Semana { semana: string; atendidas: number; asistencia: number | null; no_ocurrieron: number | null; nuevos: number; tramites: number; ocupacion: number | null }
-interface Sala { tendencia: Semana[]; relevante: Frase[]; atencion: ItemAtencion[] }
+export interface Semana { semana: string; atendidas: number; asistencia: number | null; no_ocurrieron: number | null; nuevos: number; tramites: number; ocupacion: number | null }
+export interface Sala { tendencia: Semana[]; relevante: Frase[]; atencion: ItemAtencion[] }
 interface DatosSeries {
   rango: { grano: string };
   citas: { periodo: string; grupo: string | null; n: number }[];
@@ -38,13 +38,13 @@ interface Tendencia { filas: { mes: string; especialidad: string; n: number }[] 
 const GRUPOS = ['Asistió', 'Cancelada', 'Reprogramada', 'No asistió', 'Programada', 'Sin cierre', 'Otro'];
 const ESPECIALIDADES = ['Psicología', 'Psiquiatría', 'Neuropsicología'];
 
-const asistencia = (c: N) => ratio(c.asistio, c.asistio + c.no_asistio);
-const respuesta = (e: N) => ratio(e.respondieron, e.enviados_con_respuesta);
-const noOcurrio = (c: N) => ratio(c.canceladas + c.reprogramadas, c.total);
+export const asistencia = (c: N) => ratio(c.asistio, c.asistio + c.no_asistio);
+export const respuesta = (e: N) => ratio(e.respondieron, e.enviados_con_respuesta);
+export const noOcurrio = (c: N) => ratio(c.canceladas + c.reprogramadas, c.total);
 /** Trámites que el bot resolvió sin recepción (RES-03). */
-const tramites = (i: Indicadores) => i.envios.confirmaron + i.sesiones.citas_creadas + i.sesiones.citas_canceladas + i.sesiones.citas_reprogramadas;
+export const tramites = (i: Indicadores) => i.envios.confirmaron + i.sesiones.citas_creadas + i.sesiones.citas_canceladas + i.sesiones.citas_reprogramadas;
 
-const DEF = {
+export const DEF = {
   atendidas: 'Citas de pacientes que se atendieron en el período. No incluye reuniones internas ni bloques administrativos.',
   asistencia: 'De las citas que debían ocurrir (atendidas + inasistencias), cuántas se atendieron. Las canceladas y reprogramadas no cuentan.',
   noOcurrieron: 'Citas canceladas o reprogramadas sobre el total de citas del período. Cuanto menor, mejor.',
@@ -59,7 +59,7 @@ const DEF = {
 };
 
 export default function Resumen({ rango }: { rango: Rango }) {
-  const { puede } = useAcceso();
+  const { puede, yo } = useAcceso();
   const conSala = puede('resumen.sala');
   const conMetas = puede('resumen.metas');
   const r = useApi<DatosResumen>(conRango('/api/resumen', rango), 120_000);
@@ -137,6 +137,7 @@ export default function Resumen({ rango }: { rango: Rango }) {
             {metas.data?.editable && (
               <button className="boton" onClick={() => setEditando((v) => !v)}>{editando ? 'Cerrar metas' : 'Editar metas'}</button>
             )}
+            {yo?.paginas.informe?.estado === 'ok' && <a className="boton" href="#/informe">Generar informe mensual</a>}
           </div>
           {editando && metas.data && <EditorMetas metas={metas.data.metas} onCambio={metas.recargar} onCerrar={() => setEditando(false)} />}
 

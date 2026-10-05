@@ -16,7 +16,7 @@ export function Info({ texto }: { texto: string }) {
  * Tipo de métrica (Etapa 3): un distintivo pequeño junto al título, con su explicación al pasar el cursor. Sin
  * distintivo, la cifra es observada: se cuenta directamente de los registros. No es un aviso ni un banner.
  */
-export type TipoMarca = 'observada' | 'estimada' | 'incompleta' | 'incidente';
+export type TipoMarca = 'observada' | 'estimada' | 'incompleta' | 'incidente' | 'personales';
 
 export interface MarcaDato {
   tipo: TipoMarca;
@@ -29,7 +29,23 @@ const MARCAS: Record<TipoMarca, { texto: string; explicacion: string }> = {
   estimada: { texto: 'Estimada', explicacion: 'Se calcula con un supuesto o con un enlace inferido entre registros (por ejemplo, mensaje y cita por teléfono y fecha).' },
   incompleta: { texto: 'Incompleta', explicacion: 'Parte del período no tiene este dato registrado: la cifra cubre solo los días con datos.' },
   incidente: { texto: 'Afectada por incidente', explicacion: 'El período toca un incidente conocido de registro de datos: la cifra puede quedar por debajo de la real.' },
+  personales: {
+    texto: 'Datos personales',
+    explicacion: 'Identifica a pacientes. Uso interno de la IPS (Ley 1581 de 2012): no lo comparta fuera. Las descargas quedan registradas.',
+  },
 };
+
+/**
+ * Antes de descargar un listado con datos que identifican pacientes: pide confirmación. El servidor registra la
+ * descarga por su cuenta; esta confirmación es para que la persona sepa lo que está bajando.
+ */
+export function confirmarDescargaPersonal(que: string): boolean {
+  return window.confirm(
+    `Va a descargar ${que}, con datos que identifican a pacientes (nombre, documento o teléfono).\n\n` +
+      'Son datos de salud protegidos por la Ley 1581 de 2012: úselos solo para la gestión de la IPS y no los comparta fuera de ella. ' +
+      'La descarga queda registrada con su usuario.\n\n¿Desea continuar?',
+  );
+}
 
 export function Marca({ tipo, detalle }: MarcaDato) {
   const m = MARCAS[tipo];
@@ -179,8 +195,9 @@ function aCsv<T>(filas: T[], cols: Columna<T>[]): string {
   return [enc, ...cuerpo].join('\n');
 }
 
-export function descargarCsv<T>(nombre: string, filas: T[], cols: Columna<T>[]) {
-  registrar('exportacion', nombre, `${filas.length} filas`);
+/** `registrada`: el servidor ya registró la descarga (datos personales); no se registra dos veces. */
+export function descargarCsv<T>(nombre: string, filas: T[], cols: Columna<T>[], registrada = false) {
+  if (!registrada) registrar('exportacion', nombre, `${filas.length} filas`);
   // BOM para que Excel abra bien las tildes; ';' como separador (configuración regional de Colombia).
   const blob = new Blob(['﻿' + aCsv(filas, cols)], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');

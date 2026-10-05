@@ -6,7 +6,7 @@ import { Pestanas, useMarcas, usePestana, useSombras } from '../incidentes';
 import { Bloqueado, Restringido, useAcceso } from '../acceso';
 import CampanasEfecto, { CalendarioEjecuciones } from './CampanasEfecto';
 import CampanasDesempeno from './CampanasDesempeno';
-import { descargarCsv, Estado, Tabla, Tarjeta, type Columna } from '../components/ui';
+import { confirmarDescargaPersonal, descargarCsv, Estado, Tabla, Tarjeta, type Columna } from '../components/ui';
 import { etiqueta, fecha, fechaHora, hora, num, pct } from '../format';
 
 interface FilaCampana {
@@ -155,10 +155,11 @@ function CampanasResultados({ rango }: { rango: Rango }) {
   }, [data, grupos, sombras]);
 
   const exportarTelefonos = async () => {
+    if (!confirmarDescargaPersonal('el listado de pacientes con teléfono a corregir')) return;
     setExportandoTel(true);
     try {
       const d = await getJson<{ filas: TelefonoInvalido[] }>('/api/campanas/telefonos-invalidos');
-      descargarCsv('pacientes_telefono_a_corregir', d.filas, COLS_TEL);
+      descargarCsv('pacientes_telefono_a_corregir', d.filas, COLS_TEL, true);
     } finally {
       setExportandoTel(false);
     }
@@ -166,10 +167,11 @@ function CampanasResultados({ rango }: { rango: Rango }) {
 
 
   const exportar = async () => {
+    if (!confirmarDescargaPersonal('el detalle de mensajes enviados (hasta 5.000)')) return;
     setExportando(true);
     try {
       const d = await getJson<{ filas: Envio[] }>(conRango('/api/campanas/envios', rango, { ...filtros, pagina: 1, tam: 5000 }));
-      descargarCsv(`envios_${rango.desde}_${rango.hasta}`, d.filas, COLS_ENVIO);
+      descargarCsv(`envios_${rango.desde}_${rango.hasta}`, d.filas, COLS_ENVIO, true);
     } finally {
       setExportando(false);
     }
@@ -238,6 +240,7 @@ function CampanasResultados({ rango }: { rango: Rango }) {
       <Restringido clave="campanas.detalle" titulo="Detalle de mensajes">
       <Tarjeta
         titulo="Detalle de mensajes"
+        marcas={[{ tipo: 'personales' }]}
         ayuda="Cada mensaje enviado, a quién y qué pasó después."
         accion={exportarPersonales ? <button className="boton" disabled={exportando || total === 0} onClick={exportar}>{exportando ? 'Preparando…' : 'Descargar CSV (hasta 5.000)'}</button> : undefined}
       >

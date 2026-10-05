@@ -15,12 +15,12 @@ export const MAX_USUARIOS: Record<Nivel, number | null> = { basico: 1, intermedi
 
 export type Pagina =
   | 'resumen' | 'campanas' | 'agenda' | 'capacidad' | 'profesionales' | 'chatbot' | 'lista-espera' | 'pacientes' | 'marketing'
-  | 'alertas' | 'plan' | 'mi-agenda' | 'soporte';
+  | 'alertas' | 'plan' | 'mi-agenda' | 'informe' | 'semanal' | 'soporte';
 
 export type Rol = 'direccion' | 'operacion' | 'analista' | 'relacion' | 'profesional' | 'soporte';
 export const esRol = (v: unknown): v is Rol => typeof v === 'string' && v in ROLES;
 
-const CLIENTE: Pagina[] = ['resumen', 'campanas', 'agenda', 'capacidad', 'profesionales', 'chatbot', 'lista-espera', 'pacientes', 'marketing', 'alertas', 'plan'];
+const CLIENTE: Pagina[] = ['resumen', 'informe', 'semanal', 'campanas', 'agenda', 'capacidad', 'profesionales', 'chatbot', 'lista-espera', 'pacientes', 'marketing', 'alertas', 'plan'];
 
 export const ROLES: Record<Rol, { nombre: string; inicio: Pagina; paginas: Pagina[] }> = {
   direccion: { nombre: 'Dirección', inicio: 'resumen', paginas: CLIENTE },
@@ -54,6 +54,14 @@ export const FUNCIONES: Funcion[] = [
     nivel: 'intermedio',
     titulo: 'Sala de control: lo más relevante del período, lo que requiere atención y la tendencia de cada indicador',
   },
+  {
+    clave: 'informe.mensual',
+    pagina: 'informe',
+    nivel: 'full',
+    titulo: 'Informe ejecutivo mensual para imprimir o guardar en PDF',
+    roles: ['direccion', 'analista'],
+  },
+  { clave: 'informe.semanal', pagina: 'semanal', nivel: 'full', titulo: 'Resumen semanal de la gerencia', roles: ['direccion', 'analista'] },
   { clave: 'metas.editar', pagina: 'resumen', nivel: 'full', titulo: 'Definir las metas de los indicadores', roles: ['direccion'] },
 
   { clave: 'agenda.periodo', pagina: 'agenda', nivel: 'basico', titulo: 'Citas por estado, especialidad y profesional' },
@@ -112,6 +120,13 @@ export const FUNCIONES: Funcion[] = [
   { clave: 'alertas.revisar', pagina: 'alertas', nivel: 'intermedio', titulo: 'Marcar alertas como revisadas', roles: ['direccion', 'operacion'] },
   { clave: 'confianza', pagina: null, nivel: 'intermedio', titulo: 'Índice de confianza de los datos' },
 
+  {
+    clave: 'datos.identidad',
+    pagina: null,
+    nivel: 'intermedio',
+    titulo: 'Ver documento, teléfono y correo completos de los pacientes (los demás roles los ven enmascarados)',
+    roles: ['direccion', 'analista'],
+  },
   { clave: 'exportar.csv', pagina: null, nivel: 'intermedio', titulo: 'Descargar tablas en CSV' },
   {
     clave: 'exportar.personales',
@@ -140,6 +155,8 @@ export const ENDPOINTS: Record<string, string> = {
   'GET /api/metas': 'resumen.metas',
   'PUT /api/metas': 'metas.editar',
   'GET /api/confianza': 'confianza',
+  'GET /api/informe': 'informe.mensual',
+  'GET /api/informe/semanal': 'informe.semanal',
 
   'GET /api/agenda': 'agenda.periodo',
   'GET /api/agenda/inasistencia': 'agenda.inasistencia',
@@ -206,7 +223,5 @@ export const TAM_MAX_SIN_EXPORTAR = 100;
 
 /** Funcionalidades del plan Full que todavía no existen (se muestran como "en desarrollo" en Mi plan). */
 export const PROXIMAMENTE: { titulo: string; nivel: Nivel }[] = [
-  { titulo: 'Informe ejecutivo mensual en PDF', nivel: 'full' },
-  { titulo: 'Resumen semanal por correo', nivel: 'full' },
   { titulo: 'Predicción de inasistencia y detección de anomalías', nivel: 'full' },
 ];

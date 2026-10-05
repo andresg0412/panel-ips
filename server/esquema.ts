@@ -145,8 +145,7 @@ async function sembrar() {
        ('soporte', 'soporte', 'Soporte técnico', NULL, 0),
        ('gerencia', 'direccion', 'Gerencia', 'gerencia@centrodeorientacion.com.co', 1),
        ('analista', 'analista', 'Analista', NULL, 2),
-       ('marketing', 'relacion', 'Marketing', NULL, 3),
-       ('profesional', 'profesional', 'Profesional', NULL, 4)
+       ('marketing', 'relacion', 'Marketing', NULL, 3)
      ON CONFLICT DO NOTHING`,
   );
   await poolApp!.query(`INSERT INTO panel.vigilante (id) VALUES (1) ON CONFLICT DO NOTHING`);

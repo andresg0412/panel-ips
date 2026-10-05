@@ -16,10 +16,11 @@ const rango = (n: Nivel) => ORDEN.indexOf(n);
 
 const SECCIONES: [string | null, string][] = [
   ['resumen', 'Resumen'],
+  ['semanal', 'Resumen semanal'],
+  ['informe', 'Informe mensual'],
   ['agenda', 'Agenda'],
   ['capacidad', 'Capacidad'],
   ['profesionales', 'Profesionales'],
-  ['mi-agenda', 'Mi agenda (profesionales)'],
   ['campanas', 'Campañas'],
   ['chatbot', 'Chatbot'],
   ['pacientes', 'Pacientes'],

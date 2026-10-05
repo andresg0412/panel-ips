@@ -7,7 +7,29 @@ import { puede, recortarMeses } from './acceso.js';
 type Datos = Record<string, any>;
 type Recorte = (req: FastifyRequest, d: Datos) => Datos;
 
+/** "1098765432" → "10******32". Muestra lo justo para reconocer el dato sin revelarlo. */
+export function enmascarar(v: unknown): unknown {
+  if (typeof v !== 'string' || !v) return v;
+  if (v.includes('@')) {
+    const [u, dominio] = v.split('@');
+    return `${u.slice(0, 1)}***@${dominio}`;
+  }
+  return v.length <= 4 ? '****' : `${v.slice(0, 2)}${'*'.repeat(v.length - 4)}${v.slice(-2)}`;
+}
+
+const CAMPOS_PERSONALES = ['documento_paciente', 'numero_documento', 'telefono_norm', 'numero_contacto', 'email', 'documento'];
+
+/** Enmascara documento, teléfono y correo de cada fila si la persona no tiene `datos.identidad`. */
+const enmascararFilas = (req: FastifyRequest, filas: Datos[]) =>
+  puede(req, 'datos.identidad')
+    ? filas
+    : filas.map((f) => Object.fromEntries(Object.entries(f).map(([k, v]) => [k, CAMPOS_PERSONALES.includes(k) ? enmascarar(v) : v])));
+
 const RECORTES: Record<string, Recorte> = {
+  'GET /api/campanas/envios': (req, d) => ({ ...d, filas: enmascararFilas(req, d.filas) }),
+  'GET /api/pacientes/buscar': (req, d) => ({ ...d, filas: enmascararFilas(req, d.filas) }),
+  'GET /api/pacientes/:id': (req, d) => (d.paciente ? { ...d, paciente: enmascararFilas(req, [d.paciente])[0] } : d),
+
   'GET /api/resumen': (req, d) =>
     puede(req, 'resumen.comparacion') ? d : { ...d, anterior: null, comparacion: { tipo: 'ninguna', desde: null, hasta: null } },
 

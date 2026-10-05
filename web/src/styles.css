@@ -457,3 +457,50 @@ button.enlace:disabled { opacity: 0.5; cursor: default; }
 .ahorro-cabeza { display: flex; flex-wrap: wrap; gap: 8px 28px; align-items: flex-end; margin-bottom: 12px; }
 .ahorro-horas { font-size: 40px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
 .ahorro-horas small { font-size: 15px; font-weight: 500; color: var(--ink-2); margin-left: 6px; }
+
+/* ---------------------------------------------------------------- Etapa 5: informe mensual y resumen semanal */
+.informe-barra { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 16px; }
+.informe-barra label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); }
+.informe-preparando { padding: 24px; color: var(--ink-2); }
+.informe-documento { display: grid; gap: 20px; justify-items: center; }
+.informe-hoja { position: relative; width: 100%; max-width: 900px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 32px 36px 40px; }
+.informe-h2 { margin: 0 0 16px; font-size: 20px; padding-bottom: 8px; border-bottom: 2px solid var(--accent); }
+.informe-bloque { margin-top: 18px; break-inside: avoid; }
+.informe-bloque h3 { margin: 0 0 8px; font-size: 14.5px; }
+.informe-dos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; }
+.informe-pie { position: absolute; right: 36px; bottom: 14px; font-size: 11px; color: var(--muted); }
+.informe-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+.informe-recomendaciones { margin: 0; padding-left: 20px; display: grid; gap: 8px; font-size: 14px; line-height: 1.45; }
+.informe-tabla { width: 100%; border-collapse: collapse; font-size: 13px; }
+.informe-tabla th, .informe-tabla td { padding: 6px 8px; border-bottom: 1px solid var(--grid); text-align: left; }
+.informe-tabla .num { text-align: right; font-variant-numeric: tabular-nums; }
+.informe-portada { min-height: 620px; display: flex; flex-direction: column; justify-content: space-between; gap: 40px; padding: 56px 56px 40px; background: #fff; color: #0b0b0b; }
+.informe-logo { width: 240px; max-width: 60%; height: auto; }
+.informe-tipo { font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: #2a9d9b; font-weight: 700; }
+.informe-titulo { margin: 8px 0 6px; font-size: 40px; line-height: 1.1; }
+.informe-sub { margin: 0; font-size: 16px; color: #52514e; }
+.informe-portada-pie { display: grid; gap: 4px; font-size: 12.5px; color: #52514e; border-top: 1px solid #e1e0d9; padding-top: 14px; }
+@media screen and (max-width: 760px) {
+  .informe-dos, .informe-kpis { grid-template-columns: 1fr !important; }
+  .informe-hoja { padding: 22px 18px 34px; }
+  .informe-portada { padding: 32px 22px; min-height: 0; }
+}
+
+@media print {
+  @page { size: A4; margin: 12mm; }
+  .app:has(.informe) .cabecera, .app:has(.informe) .herramientas, .informe-barra { display: none !important; }
+  .informe-documento { display: block; }
+  .informe-hoja { max-width: none; border: 0; border-radius: 0; padding: 0 0 28px; break-after: page; }
+  .informe-hoja:last-child { break-after: auto; }
+  .informe-portada { min-height: 250mm; padding: 10mm 6mm; }
+  .informe-pie { right: 0; bottom: 0; }
+  .informe-kpis .kpi-principal { break-inside: avoid; }
+  /* Sin animaciones al imprimir: la aparición suave de las tarjetas dejaría el contenido a medio pintar. */
+  .informe *, .contenido > *, .kpi-principal, .card { animation: none !important; transition: none !important; }
+  .informe .info::after, .informe .distintivo::after, .informe .frase-enlace { display: none !important; }
+  .informe .embudo-etapa { grid-template-columns: 160px 1fr 250px; }
+  .informe .embudo-cifras { white-space: normal; flex-wrap: wrap; justify-content: flex-end; gap: 2px 8px; }
+}
+
+/* Datos personales: distintivo y aviso de descarga */
+.distintivo-personales { color: var(--down); background: color-mix(in srgb, var(--critical) 10%, transparent); border-color: transparent; }

@@ -98,13 +98,13 @@ function Agenda({ datos, rango }: { datos: Datos; rango: Rango }) {
       </div>
       <Tarjeta
         titulo="Mis próximas citas"
-        marcas={marcas}
+        marcas={[{ tipo: 'personales' }, ...marcas]}
         ayuda={`Próximos 14 días: ${num(proximas.length)} citas, ${num(sinConfirmar)} sin confirmar${riesgo ? ` y ${num(riesgo)} con pacientes que faltaron 2 o más veces en los últimos 6 meses (conviene reforzar el recordatorio)` : ''}.`}
       >
         <Tabla filas={proximas} columnas={COLS_PROX} vacio="Sin citas programadas en los próximos 14 días" />
       </Tarjeta>
       <div className="grid g2">
-        <Tarjeta titulo="Pacientes que faltan con frecuencia" ayuda="Sus pacientes con 2 o más inasistencias en los últimos 120 días. Una llamada antes de la próxima cita ayuda a que no se pierda.">
+        <Tarjeta titulo="Pacientes que faltan con frecuencia" marcas={[{ tipo: 'personales' }]} ayuda="Sus pacientes con 2 o más inasistencias en los últimos 120 días. Una llamada antes de la próxima cita ayuda a que no se pierda.">
           <Tabla filas={datos.faltan ?? []} columnas={COLS_FALTAN} vacio="Ningún paciente suyo faltó 2 o más veces en los últimos 120 días" />
         </Tarjeta>
         <Tarjeta

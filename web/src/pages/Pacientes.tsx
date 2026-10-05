@@ -97,7 +97,7 @@ function BuscarPaciente() {
 
   return (
     <>
-      <Tarjeta titulo="Buscar paciente" ayuda="Por número de documento, teléfono o nombre.">
+      <Tarjeta titulo="Buscar paciente" marcas={[{ tipo: 'personales' }]} ayuda="Por número de documento, teléfono o nombre.">
         <div className="filtros">
           <input style={{ minWidth: 320 }} placeholder="Ej.: 1098765432, 3001234567 o María Pérez" value={texto} onChange={(e) => setTexto(e.target.value)} autoFocus />
         </div>
@@ -114,7 +114,7 @@ function BuscarPaciente() {
           <Estado cargando={ficha.cargando} error={ficha.error} hayDatos={!!ficha.data} />
           {ficha.data && (
             <>
-              <Tarjeta titulo={String(ficha.data.paciente.nombre_completo ?? 'Paciente')}>
+              <Tarjeta titulo={String(ficha.data.paciente.nombre_completo ?? 'Paciente')} marcas={[{ tipo: 'personales' }]}>
                 <div className="datos-paciente">
                   {CAMPOS.map(([k, t]) => (
                     <div key={k}>
