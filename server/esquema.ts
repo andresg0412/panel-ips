@@ -99,6 +99,25 @@ const MIGRACIONES: { nombre: string; sql: string }[] = [
       );
     `,
   },
+  {
+    // Etapa 2: metas editables de la sala de control y alertas operativas que el cliente marcó como revisadas.
+    nombre: '002_metas_alertas_cliente',
+    sql: `
+      CREATE TABLE panel.metas (
+        indicador text PRIMARY KEY,
+        valor numeric NOT NULL CHECK (valor >= 0),
+        actualizado_por text,
+        actualizado_at timestamptz NOT NULL DEFAULT now()
+      );
+
+      -- Clave = regla + ocurrencia (p. ej. campana_no_corrio:execute:2026-10-05). Se borran a los 30 días.
+      CREATE TABLE panel.alertas_cliente_revisadas (
+        clave text PRIMARY KEY,
+        revisada_por text NOT NULL,
+        revisada_at timestamptz NOT NULL DEFAULT now()
+      );
+    `,
+  },
 ];
 
 /** Configuración inicial (solo si no existe): nivel Full y los usuarios que ya tiene nginx, con su rol. */

@@ -1,19 +1,24 @@
-import { useCallback } from 'react';
-import { conRango, useApi, type Rango } from '../api';
+import { useCallback, useState } from 'react';
+import { conRango, enviarJson, useApi, type Rango } from '../api';
 import Grafico from '../components/Grafico';
 import { pequenosMultiplos } from '../components/series';
 import { Estado, Tarjeta } from '../components/ui';
 import { rangoAnterior, useSombras, type Incidente } from '../incidentes';
-import { fecha } from '../format';
+import { fecha, fechaHora } from '../format';
+import { MedidorConfianza, type Confianza } from '../components/sala';
+import { Esqueleto } from '../components/ui';
 import Sistema from './Sistema';
 import { CalendarioEjecuciones } from './CampanasEfecto';
 import { Bloqueado, useAcceso } from '../acceso';
 
 interface Alerta {
   alerta: string;
+  clave: string;
   severidad: 'alta' | 'media';
   titulo: string;
   detalle: string;
+  enlace: string;
+  revisada: { por: string; at: string } | null;
 }
 interface Salud {
   dias: { fecha: string; envios: number; pct_fallo: number | null; sesiones: number; citas_registradas: number; citas_actualizadas: number; errores: number }[];
@@ -33,16 +38,35 @@ const AREA: Record<string, string> = {
   trazabilidad: 'Registro de envíos',
 };
 
-function TarjetaAlerta({ a }: { a: Alerta }) {
+function TarjetaAlerta({ a, onCambio }: { a: Alerta; onCambio: () => void }) {
   const e = ESTILO[a.severidad];
+  const { yo, puede } = useAcceso();
+  const [ocupado, setOcupado] = useState(false);
+  const pagina = a.enlace.replace(/^#\/?/, '').split('?')[0];
+  const marcar = async (revisada: boolean) => {
+    setOcupado(true);
+    try {
+      await enviarJson('POST', '/api/alertas/revisar', { clave: a.clave, revisada });
+      onCambio();
+    } finally {
+      setOcupado(false);
+    }
+  };
   return (
-    <div className="kpi" style={{ borderLeft: `4px solid ${e.color}` }}>
+    <div className={`kpi${a.revisada ? ' alerta-revisada' : ''}`} style={{ borderLeft: `4px solid ${e.color}` }}>
       <div className="estado" style={{ marginBottom: 4 }}>
         <span className="punto" style={{ background: e.color }} />
-        <span>{e.icono} {e.texto}</span>
+        <span>{a.revisada ? '✓ Revisada' : `${e.icono} ${e.texto}`}</span>
       </div>
       <div style={{ fontWeight: 600, marginBottom: 4 }}>{a.titulo}</div>
       <div className="delta">{a.detalle}</div>
+      {a.revisada && <div className="delta" style={{ marginTop: 4 }}>Revisada por {a.revisada.por} · {fechaHora(a.revisada.at)}</div>}
+      <div className="campanita-acciones" style={{ marginTop: 8 }}>
+        {pagina !== 'alertas' && yo?.paginas[pagina]?.estado === 'ok' && <a href={a.enlace}>Investigar</a>}
+        {puede('alertas.revisar') && (
+          <button className="enlace" disabled={ocupado} onClick={() => marcar(!a.revisada)}>{a.revisada ? 'Marcar pendiente' : 'Marcar revisada'}</button>
+        )}
+      </div>
     </div>
   );
 }
@@ -81,7 +105,8 @@ export default function Alertas({ rango }: { rango: Rango }) {
 
 function AlertasPanel({ rango }: { rango: Rango }) {
   const { puede } = useAcceso();
-  const { data, error, cargando } = useApi<{ activas: Alerta[]; incidentes: Incidente[] }>('/api/alertas', 60_000);
+  const { data, error, cargando, recargar } = useApi<{ activas: Alerta[]; incidentes: Incidente[] }>('/api/alertas', 60_000);
+  const conf = useApi<Confianza>(puede('confianza') ? conRango('/api/confianza', rango) : null, 300_000);
   const salud = useApi<Salud>(conRango('/api/alertas/salud', rango), 300_000);
   const sombras = useSombras(['general']);
 
@@ -104,6 +129,14 @@ function AlertasPanel({ rango }: { rango: Rango }) {
 
   return (
     <>
+      {puede('confianza') && (
+        <Tarjeta
+          titulo="Confianza de los datos del período"
+          ayuda="Combina qué tan al día están la agenda, el bot y las campañas, la calidad de teléfonos y profesionales, y los incidentes conocidos. Cada punto bajo 90 % indica dónde revisar."
+        >
+          {conf.data ? <MedidorConfianza c={conf.data} detalle /> : conf.error ? <div className="error">{conf.error}</div> : <Esqueleto forma="bloque" />}
+        </Tarjeta>
+      )}
       <Estado cargando={cargando} error={error} hayDatos={!!data} />
       {data && (
         <>
@@ -113,8 +146,8 @@ function AlertasPanel({ rango }: { rango: Rango }) {
           >
             {data.activas.length ? (
               <div className="kpis" style={{ marginBottom: 0 }}>
-                {data.activas.map((a, i) => (
-                  <TarjetaAlerta key={i} a={a} />
+                {data.activas.map((a) => (
+                  <TarjetaAlerta key={a.clave} a={a} onCambio={recargar} />
                 ))}
               </div>
             ) : (

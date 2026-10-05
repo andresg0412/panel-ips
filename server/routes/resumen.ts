@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { conCache } from '../cache.js';
 import { claveCache } from '../acceso.js';
-import { leerRango, sumarDias } from '../params.js';
+import { leerRango, sumarDias, type Rango } from '../params.js';
 import { incidentes } from '../incidentes.js';
 import { CITAS, MESES, PERIODOS, periodo } from '../sql.js';
 
@@ -10,7 +10,7 @@ import { CITAS, MESES, PERIODOS, periodo } from '../sql.js';
 export const FUERA_HORARIO = `(extract(hour FROM inicio_at_bogota) < 7 OR extract(hour FROM inicio_at_bogota) >= 19
                         OR extract(isodow FROM inicio_at_bogota) = 7)`;
 
-async function indicadores(desde: string, hasta: string) {
+export async function indicadores(desde: string, hasta: string) {
   const p = [desde, hasta];
   const [citas, envios, sesiones, listaEspera] = await Promise.all([
     // Solo citas de pacientes (TR-02): sin reuniones internas ni bloques administrativos.
@@ -71,7 +71,7 @@ async function indicadores(desde: string, hasta: string) {
 }
 
 /** Fracción de días del rango que cae en un incidente que afecta a las métricas del resumen. */
-function fraccionEnIncidente(desde: string, hasta: string): number {
+export function fraccionEnIncidente(desde: string, hasta: string): number {
   const inc = incidentes().filter((i) => i.area !== 'trazabilidad');
   let total = 0;
   let malos = 0;
@@ -88,7 +88,7 @@ const INICIO_DATOS = '2025-08-01';
  * Con qué se compara el período (TR-01): el período anterior si es confiable; si más del 30 % cae en un
  * incidente, el mismo período del año anterior (misma semana, 364 días antes); si tampoco sirve, no se compara.
  */
-function periodoComparacion(r: { desde: string; hasta: string; prevDesde: string; prevHasta: string }) {
+export function periodoComparacion(r: { desde: string; hasta: string; prevDesde: string; prevHasta: string }) {
   if (r.prevDesde >= INICIO_DATOS && fraccionEnIncidente(r.prevDesde, r.prevHasta) <= 0.3) {
     return { tipo: 'anterior' as const, desde: r.prevDesde, hasta: r.prevHasta };
   }
@@ -98,18 +98,20 @@ function periodoComparacion(r: { desde: string; hasta: string; prevDesde: string
   return { tipo: 'ninguna' as const, desde: null, hasta: null };
 }
 
-export default async function rutasResumen(app: FastifyInstance) {
-  app.get('/api/resumen', async (req) => {
-    const r = leerRango(req.query as Record<string, unknown>);
-    return conCache(claveCache(req), async () => {
-      const comp = periodoComparacion(r);
-      const [actual, anterior] = await Promise.all([
-        indicadores(r.desde, r.hasta),
-        comp.desde && comp.hasta ? indicadores(comp.desde, comp.hasta) : Promise.resolve(null),
-      ]);
-      return { rango: r, actual, anterior, comparacion: comp };
-    });
+/** Indicadores del período y de su comparación. Lo comparten /api/resumen y la sala de control. */
+export function datosResumen(r: Rango) {
+  return conCache(`resumen-datos:${r.desde}:${r.hasta}`, async () => {
+    const comp = periodoComparacion(r);
+    const [actual, anterior] = await Promise.all([
+      indicadores(r.desde, r.hasta),
+      comp.desde && comp.hasta ? indicadores(comp.desde, comp.hasta) : Promise.resolve(null),
+    ]);
+    return { rango: r, actual, anterior, comparacion: comp };
   });
+}
+
+export default async function rutasResumen(app: FastifyInstance) {
+  app.get('/api/resumen', async (req) => datosResumen(leerRango(req.query as Record<string, unknown>)));
 
   app.get('/api/resumen/series', async (req) => {
     const r = leerRango(req.query as Record<string, unknown>);

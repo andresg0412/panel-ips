@@ -3,6 +3,15 @@ import { registrar, type Rango } from '../api';
 import { num } from '../format';
 import { useAcceso, Candado } from '../acceso';
 
+/** Definición de una métrica: una "i" que muestra el texto al pasar el cursor o al enfocarla con el teclado. */
+export function Info({ texto }: { texto: string }) {
+  return (
+    <span className="info" tabIndex={0} role="note" aria-label={texto} data-tip={texto}>
+      i
+    </span>
+  );
+}
+
 export function Tarjeta({ titulo, ayuda, children, accion }: { titulo: string; ayuda?: ReactNode; children: ReactNode; accion?: ReactNode }) {
   return (
     <section className="card">
@@ -20,8 +29,10 @@ export function Tarjeta({ titulo, ayuda, children, accion }: { titulo: string; a
  * Indicador con comparación contra el período anterior.
  * `mejorSiSube=false` para métricas donde subir es malo (cancelaciones, abandono).
  */
-export function Kpi({ etiqueta, valor, actual, anterior, mejorSiSube = true, formato = 'num', comparacion = 'vs período anterior', meta }: {
+export function Kpi({ etiqueta, valor, actual, anterior, mejorSiSube = true, formato = 'num', comparacion = 'vs período anterior', meta, ayuda }: {
   etiqueta: string;
+  /** Definición de la métrica (se muestra en la "i"). */
+  ayuda?: string;
   valor?: string;
   actual: number | null;
   anterior?: number | null;
@@ -71,7 +82,10 @@ export function Kpi({ etiqueta, valor, actual, anterior, mejorSiSube = true, for
   }
   return (
     <div className="kpi">
-      <div className="etiqueta">{etiqueta}</div>
+      <div className="etiqueta">
+        {etiqueta}
+        {ayuda && <> <Info texto={ayuda} /></>}
+      </div>
       <div className="valor">{mostrar}</div>
       {delta}
       {indicadorMeta}
@@ -79,10 +93,30 @@ export function Kpi({ etiqueta, valor, actual, anterior, mejorSiSube = true, for
   );
 }
 
-export function Estado({ cargando, error, hayDatos }: { cargando: boolean; error: string | null; hayDatos: boolean }) {
+export function Estado({ cargando, error, hayDatos, forma = 'tarjetas' }: {
+  cargando: boolean;
+  error: string | null;
+  hayDatos: boolean;
+  /** Silueta mientras carga: indicadores + gráfico, o solo un bloque. */
+  forma?: 'tarjetas' | 'bloque';
+}) {
   if (error) return <div className="error">No se pudieron cargar los datos: {error}</div>;
-  if (cargando && !hayDatos) return <div className="cargando">Cargando…</div>;
+  if (cargando && !hayDatos) return <Esqueleto forma={forma} />;
   return null;
+}
+
+/** Silueta animada mientras llegan los datos (en vez de un "Cargando…"). */
+export function Esqueleto({ forma = 'tarjetas' }: { forma?: 'tarjetas' | 'bloque' }) {
+  return (
+    <div className="esqueleto" aria-busy="true" aria-label="Cargando">
+      {forma === 'tarjetas' && (
+        <div className="esqueleto-fila">
+          {[0, 1, 2, 3].map((i) => <span key={i} className="esqueleto-kpi" />)}
+        </div>
+      )}
+      <span className="esqueleto-bloque" />
+    </div>
+  );
 }
 
 export interface Columna<T> {
@@ -160,7 +194,10 @@ export function Tabla<T extends Record<string, any>>({ filas, columnas, nombreCs
           <tbody>
             {ordenadas.length === 0 ? (
               <tr>
-                <td colSpan={columnas.length} style={{ color: 'var(--muted)' }}>{vacio}</td>
+                <td colSpan={columnas.length} className="celda-vacia">
+                  {vacio}
+                  {vacio === 'Sin datos para este período' && <span> · Pruebe con un período más largo.</span>}
+                </td>
               </tr>
             ) : (
               ordenadas.map((f, i) => (
@@ -247,7 +284,7 @@ export function SelectorRango({ rango, preset, onCambio, minimo }: { rango: Rang
 }
 
 export function ListaConteo({ items, total }: { items: { clave: string; etiqueta: string; n: number }[]; total?: number }) {
-  if (items.length === 0) return <p className="ayuda">Sin datos para este período.</p>;
+  if (items.length === 0) return <p className="vacio">Sin datos para este período. Pruebe con un período más largo.</p>;
   return (
     <ul className="lista-simple">
       {items.map((i) => (

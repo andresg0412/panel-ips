@@ -58,8 +58,45 @@ async function leerRespuesta<T>(res: Response): Promise<T> {
   return body as T;
 }
 
+/**
+ * Estado de la conexión con el servidor, para la cabecera: hora de la última respuesta buena y si la última
+ * petición falló por red o por el servidor (5xx). Los 4xx (falta de permiso, datos inválidos) no cuentan.
+ */
+export interface Conexion {
+  ultimoOk: number | null;
+  caida: boolean;
+}
+const conexion: Conexion = { ultimoOk: null, caida: false };
+const oyentes = new Set<() => void>();
+function marcarConexion(ok: boolean) {
+  if (ok) conexion.ultimoOk = Date.now();
+  conexion.caida = !ok;
+  oyentes.forEach((f) => f());
+}
+
+export function useConexion(): Conexion {
+  const [, forzar] = useState(0);
+  useEffect(() => {
+    const f = () => forzar((n) => n + 1);
+    oyentes.add(f);
+    return () => {
+      oyentes.delete(f);
+    };
+  }, []);
+  return { ...conexion };
+}
+
 export async function getJson<T>(url: string): Promise<T> {
-  return leerRespuesta<T>(await fetch(url, { headers: cabeceras() }));
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: cabeceras() });
+  } catch (e) {
+    marcarConexion(false);
+    throw e;
+  }
+  if (res.ok) marcarConexion(true);
+  else if (res.status >= 500) marcarConexion(false);
+  return leerRespuesta<T>(res);
 }
 
 export async function enviarJson<T>(metodo: 'POST' | 'PUT' | 'DELETE', url: string, cuerpo?: unknown): Promise<T> {

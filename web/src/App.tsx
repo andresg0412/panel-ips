@@ -1,5 +1,5 @@
 import { useEffect, useState, type ComponentType } from 'react';
-import { RefrescoCtx, cambiarVistaPrevia, registrar, useApi, type Rango } from './api';
+import { RefrescoCtx, cambiarVistaPrevia, registrar, useApi, useConexion, type Rango } from './api';
 import { SelectorRango, rangoPreset } from './components/ui';
 import Resumen from './pages/Resumen';
 import Campanas from './pages/Campanas';
@@ -15,6 +15,8 @@ import Soporte from './pages/Soporte';
 import { IncidentesCtx, type Incidente } from './incidentes';
 import { AccesoCtx, Bloqueado, Candado, type Yo } from './acceso';
 import { fecha } from './format';
+import Campanita from './components/Campanita';
+import { Icono } from './components/iconos';
 
 interface Pagina {
   ruta: string;
@@ -97,8 +99,6 @@ function aplicarTema(t: Tema) {
   else document.documentElement.dataset.theme = t;
 }
 
-const horaActual = () => new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' });
-
 /** El rango no puede empezar antes del historial que permite el plan. */
 function recortarRango(r: Rango, minimo: string | null): Rango {
   if (!minimo) return r;
@@ -130,14 +130,57 @@ export default function App() {
   );
 }
 
+/** Grupos del menú (Etapa 2). Cada persona ve solo las pantallas de su rol; los grupos vacíos no se muestran. */
+const GRUPOS: { clave: string; titulo: string; paginas: string[] }[] = [
+  { clave: 'direccion', titulo: 'Dirección', paginas: ['resumen'] },
+  { clave: 'operacion', titulo: 'Operación', paginas: ['agenda', 'profesionales', 'lista-espera', 'alertas'] },
+  { clave: 'relacion', titulo: 'Relación con pacientes', paginas: ['campanas', 'chatbot', 'pacientes', 'marketing'] },
+  { clave: 'cuenta', titulo: 'Su cuenta', paginas: ['plan', 'soporte'] },
+];
+
+/** Vista por defecto según el rol: decide qué grupo va primero en el menú. */
+const VISTA_ROL: Record<string, string> = { direccion: 'direccion', analista: 'direccion', operacion: 'operacion', relacion: 'relacion', profesional: 'direccion', soporte: 'direccion' };
+
+function haceCuanto(ms: number): string {
+  const min = Math.floor((Date.now() - ms) / 60_000);
+  if (min < 1) return 'hace menos de un minuto';
+  if (min === 1) return 'hace 1 minuto';
+  if (min < 60) return `hace ${min} minutos`;
+  const h = Math.floor(min / 60);
+  return h === 1 ? 'hace 1 hora' : `hace ${h} horas`;
+}
+
+/** "Actualizado hace X min" y un punto de color: verde si el servidor responde, rojo si no. */
+function EstadoConexion() {
+  const c = useConexion();
+  const [, tic] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => tic((n) => n + 1), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  if (c.caida) {
+    return (
+      <span className="conexion caida" role="status">
+        <span className="punto-inline" /> Sin conexión con el servidor · se reintenta solo
+      </span>
+    );
+  }
+  return (
+    <span className="conexion" role="status" title={c.ultimoOk ? `Última respuesta: ${new Date(c.ultimoOk).toLocaleTimeString('es-CO', { timeZone: 'America/Bogota' })}` : undefined}>
+      <span className="punto-inline" /> {c.ultimoOk ? `Actualizado ${haceCuanto(c.ultimoOk)}` : 'Conectando…'} · se actualiza solo
+    </span>
+  );
+}
+
 function Panel({ yo }: { yo: Yo }) {
   const [estado, setEstado] = useState<Estado>(leerUrl);
   const [tema, setTema] = useState<Tema>(() => (leerAlmacen('panel.tema') as Tema) || 'auto');
   const [refresco, setRefresco] = useState(0);
-  const [horaDatos, setHoraDatos] = useState(horaActual);
+  const [menuAbierto, setMenuAbierto] = useState(false);
+  const [vista, setVista] = useState<string>(() => leerAlmacen('panel.vista') ?? VISTA_ROL[yo.rol ?? ''] ?? 'direccion');
   const incidentes = useApi<{ incidentes: Incidente[] }>('/api/incidentes');
   const verAlertas = yo.funciones['alertas.conteo']?.ok;
-  const alertas = useApi<{ n: number }>(verAlertas ? '/api/alertas/conteo' : null, 60_000);
+  const alertas = useApi<{ n: number; altas: number }>(verAlertas ? '/api/alertas/conteo' : null, 60_000);
   const esSoporte = yo.rolReal === 'soporte';
   const soporte = useApi<{ n: number; altas: number }>(esSoporte ? '/api/soporte/conteo' : null, 60_000);
 
@@ -146,8 +189,14 @@ function Panel({ yo }: { yo: Yo }) {
   const rutaInicio = visibles.find((p) => p.ruta === yo.inicio)?.ruta ?? visibles[0]?.ruta ?? 'plan';
   const ruta = estado.ruta && estadoPagina(estado.ruta) !== 'oculta' ? estado.ruta : rutaInicio;
 
+  // Grupos con al menos una pantalla visible; el de la vista elegida va primero ("Su cuenta" siempre al final).
+  const grupos = GRUPOS.map((g) => ({ ...g, paginas: g.paginas.map((r) => visibles.find((p) => p.ruta === r)).filter((p): p is Pagina => !!p) }))
+    .filter((g) => g.paginas.length)
+    .sort((a, b) => (a.clave === 'cuenta' ? 1 : b.clave === 'cuenta' ? -1 : (a.clave === vista ? -1 : 0) - (b.clave === vista ? -1 : 0)));
+  const gruposDeTrabajo = grupos.filter((g) => g.clave !== 'cuenta');
+
   useEffect(() => {
-    const fn = () => setEstado(leerUrl());
+    const fn = () => (setEstado(leerUrl()), setMenuAbierto(false));
     window.addEventListener('hashchange', fn);
     return () => window.removeEventListener('hashchange', fn);
   }, []);
@@ -177,9 +226,11 @@ function Panel({ yo }: { yo: Yo }) {
     if (preset !== 'custom') guardarAlmacen('panel.preset', preset);
   };
 
-  const actualizar = () => {
-    setRefresco((n) => n + 1);
-    setHoraDatos(horaActual());
+  const cambiarVista = (v: string) => {
+    setVista(v);
+    guardarAlmacen('panel.vista', v);
+    const primera = gruposDeTrabajo.find((g) => g.clave === v)?.paginas[0];
+    if (primera) location.hash = `#/${primera.ruta}${sufijo}`;
   };
 
   const imprimir = () => {
@@ -198,24 +249,48 @@ function Panel({ yo }: { yo: Yo }) {
     <RefrescoCtx.Provider value={refresco}>
       <IncidentesCtx.Provider value={incidentes.data?.incidentes ?? []}>
       <div className="app">
-        <nav className="nav">
+        <div className="barra-movil">
+          <button className="boton boton-menu" onClick={() => setMenuAbierto(true)} aria-label="Abrir el menú" aria-expanded={menuAbierto}>
+            <Icono nombre="menu" />
+          </button>
+          <span className="barra-movil-titulo">{pagina.titulo}</span>
+          {verAlertas && <Campanita conteo={alertas.data} onCambio={alertas.recargar} />}
+        </div>
+        {menuAbierto && <div className="velo" onClick={() => setMenuAbierto(false)} aria-hidden="true" />}
+        <nav className={`nav${menuAbierto ? ' abierta' : ''}`} aria-label="Menú principal">
           <h1>Centro de Orientación</h1>
           <p className="sub">Panel de reportes</p>
-          {visibles.map((p) => {
-            const candado = estadoPagina(p.ruta) === 'bloqueada';
-            return (
-              <a key={p.ruta} href={`#/${p.ruta}${sufijo}`} className={`${p.ruta === ruta ? 'activo' : ''}${candado ? ' con-candado' : ''}`}>
-                {p.titulo}
-                {candado && <Candado titulo={`Disponible en el plan ${yo.niveles[yo.paginas[p.ruta].nivel]}`} />}
-                {p.ruta === 'alertas' && (alertas.data?.n ?? 0) > 0 && (
-                  <span className="insignia" title={`${alertas.data!.n} alertas activas`}>{alertas.data!.n}</span>
-                )}
-                {p.ruta === 'soporte' && (soporte.data?.n ?? 0) > 0 && (
-                  <span className={`insignia${soporte.data!.altas ? '' : ' insignia-media'}`} title={`${soporte.data!.n} alertas técnicas activas`}>{soporte.data!.n}</span>
-                )}
-              </a>
-            );
-          })}
+          {gruposDeTrabajo.length > 1 && (
+            <label className="selector-vista">
+              <span>Vista</span>
+              <select value={vista} onChange={(e) => cambiarVista(e.target.value)} aria-label="Vista del menú">
+                {gruposDeTrabajo.map((g) => <option key={g.clave} value={g.clave}>{g.titulo}</option>)}
+              </select>
+            </label>
+          )}
+          <div className="nav-grupos">
+            {grupos.map((g) => (
+              <div key={g.clave} className="nav-grupo">
+                <div className="nav-grupo-titulo">{g.titulo}</div>
+                {g.paginas.map((p) => {
+                  const candado = estadoPagina(p.ruta) === 'bloqueada';
+                  return (
+                    <a key={p.ruta} href={`#/${p.ruta}${sufijo}`} className={`${p.ruta === ruta ? 'activo' : ''}${candado ? ' con-candado' : ''}`}>
+                      <Icono nombre={p.ruta} />
+                      <span className="nav-texto">{p.titulo}</span>
+                      {candado && <Candado titulo={`Disponible en el plan ${yo.niveles[yo.paginas[p.ruta].nivel]}`} />}
+                      {p.ruta === 'alertas' && (alertas.data?.n ?? 0) > 0 && (
+                        <span className={`insignia${alertas.data!.altas ? '' : ' insignia-media'}`} title={`${alertas.data!.n} alertas sin revisar`}>{alertas.data!.n}</span>
+                      )}
+                      {p.ruta === 'soporte' && (soporte.data?.n ?? 0) > 0 && (
+                        <span className={`insignia${soporte.data!.altas ? '' : ' insignia-media'}`} title={`${soporte.data!.n} alertas técnicas activas`}>{soporte.data!.n}</span>
+                      )}
+                    </a>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
           <div className="pie">
             <label>
               Tema{' '}
@@ -254,12 +329,17 @@ function Panel({ yo }: { yo: Yo }) {
             </div>
             {pagina.conRango && !bloqueada && <SelectorRango rango={rango} preset={estado.preset} onCambio={cambiarRango} minimo={yo.historialDesde} />}
           </div>
-          <div className="herramientas" style={{ marginTop: -8, marginBottom: 16 }}>
-            <span>Datos de las {horaDatos} · se actualizan solos</span>
-            <button onClick={actualizar}>Actualizar ahora</button>
-            <button onClick={imprimir}>Imprimir / PDF</button>
+          <div className="herramientas">
+            <EstadoConexion />
+            <span className="herramientas-acciones">
+              <button onClick={() => setRefresco((n) => n + 1)}>Actualizar ahora</button>
+              <button onClick={imprimir}>Imprimir / PDF</button>
+              {verAlertas && <span className="solo-escritorio"><Campanita conteo={alertas.data} onCambio={alertas.recargar} /></span>}
+            </span>
           </div>
-          {bloqueada ? <Bloqueado clave={pagina.funcion} titulo={pagina.titulo} alto={320} /> : <Comp rango={rango} />}
+          <div className="contenido" key={ruta}>
+            {bloqueada ? <Bloqueado clave={pagina.funcion} titulo={pagina.titulo} alto={320} /> : <Comp rango={rango} />}
+          </div>
         </main>
       </div>
       </IncidentesCtx.Provider>

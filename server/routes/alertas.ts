@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
-import { query, queryOne } from '../db.js';
+import { query, queryApp, queryOne } from '../db.js';
 import { conCache } from '../cache.js';
-import { claveCache } from '../acceso.js';
+import { MODO_LEGADO, claveCache, registrarActividad } from '../acceso.js';
 import { hoyBogota, leerRango, sumarDias } from '../params.js';
 import { incidentes } from '../incidentes.js';
 import { HOY } from '../sql.js';
@@ -14,6 +14,41 @@ export interface Alerta {
   detalle: string;
   /** Distingue ocurrencias de la misma regla (campaña, día) para el seguimiento de soporte. */
   instancia?: string;
+}
+
+/** Pantalla del panel donde se investiga cada regla. */
+export const ENLACE_ALERTA: Record<string, string> = {
+  campana_no_corrio: '#/campanas?t=ejecuciones',
+  campana_sin_envios: '#/campanas?t=ejecuciones',
+  fallo_envio_alto: '#/campanas',
+  scraper_sin_actualizar: '#/alertas',
+  bot_sin_conversaciones: '#/chatbot',
+  errores_bot: '#/alertas',
+};
+
+export const claveAlerta = (a: Alerta) => `${a.alerta}${a.instancia ? `:${a.instancia}` : ''}`;
+
+/** Alertas que alguien del cliente marcó como revisadas: siguen visibles, pero no cuentan en el número. */
+async function revisadas(): Promise<Map<string, { por: string; at: string }>> {
+  if (MODO_LEGADO) return new Map();
+  try {
+    const filas = await queryApp<{ clave: string; revisada_por: string; revisada_at: string }>(
+      `SELECT clave, revisada_por, to_char(revisada_at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD"T"HH24:MI:SS') AS revisada_at
+         FROM panel.alertas_cliente_revisadas`,
+    );
+    return new Map(filas.map((f) => [f.clave, { por: f.revisada_por, at: f.revisada_at }]));
+  } catch {
+    return new Map();
+  }
+}
+
+/** Alertas activas con su clave, su enlace y si ya se revisaron. */
+export async function alertasConEstado() {
+  const [activas, rev] = await Promise.all([conCache('alertas', alertasActivas, 60_000), revisadas()]);
+  return activas.map((a) => {
+    const clave = claveAlerta(a);
+    return { ...a, clave, enlace: ENLACE_ALERTA[a.alerta] ?? '#/alertas', revisada: rev.get(clave) ?? null };
+  });
 }
 
 // Errores de envío: la mayor de dos fuentes (envios_whatsapp puede faltar, como del 1 al 3 de octubre de 2026,
@@ -143,13 +178,46 @@ export async function alertasActivas(): Promise<Alerta[]> {
 }
 
 export default async function rutasAlertas(app: FastifyInstance) {
-  // Liviano: lo consulta el menú cada minuto para mostrar el número de alertas activas.
-  app.get('/api/alertas/conteo', async () => conCache('alertas', alertasActivas, 60_000).then((a) => ({ n: a.length })));
+  // Liviano: lo consulta la cabecera cada minuto. Cuenta solo las que nadie ha revisado.
+  app.get('/api/alertas/conteo', async () => {
+    const a = await alertasConEstado();
+    const pendientes = a.filter((x) => !x.revisada);
+    return { n: pendientes.length, altas: pendientes.filter((x) => x.severidad === 'alta').length };
+  });
 
   app.get('/api/alertas', async () => ({
-    activas: await conCache('alertas', alertasActivas, 60_000),
+    activas: await alertasConEstado(),
     incidentes: incidentes(),
   }));
+
+  // Dirección y Operación marcan una alerta como revisada (o deshacen la marca).
+  app.post(
+    '/api/alertas/revisar',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['clave', 'revisada'],
+          additionalProperties: false,
+          properties: { clave: { type: 'string', minLength: 3, maxLength: 120 }, revisada: { type: 'boolean' } },
+        },
+      },
+    },
+    async (req) => {
+      const b = req.body as { clave: string; revisada: boolean };
+      if (b.revisada) {
+        await queryApp(
+          `INSERT INTO panel.alertas_cliente_revisadas (clave, revisada_por) VALUES ($1, $2)
+           ON CONFLICT (clave) DO UPDATE SET revisada_por = EXCLUDED.revisada_por, revisada_at = now()`,
+          [b.clave, req.contexto!.usuario],
+        );
+      } else {
+        await queryApp(`DELETE FROM panel.alertas_cliente_revisadas WHERE clave = $1`, [b.clave]);
+      }
+      registrarActividad(req.contexto, { tipo: 'configuracion', ruta: 'alerta_cliente', detalle: `${b.clave} → ${b.revisada ? 'revisada' : 'pendiente'}`, status: 200, ms: null });
+      return { ok: true };
+    },
+  );
 
   // SIS-02: salud diaria de los datos. Cinco series que muestran cuándo dejó de llegar algo.
   app.get('/api/alertas/salud', async (req) => {

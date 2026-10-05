@@ -48,6 +48,13 @@ export const FUNCIONES: Funcion[] = [
   { clave: 'resumen.comparacion', pagina: 'resumen', nivel: 'intermedio', titulo: 'Comparación con el período anterior' },
   { clave: 'resumen.metas', pagina: 'resumen', nivel: 'intermedio', titulo: 'Metas con semáforo, ocupación y pacientes nuevos' },
   { clave: 'resumen.tendencia', pagina: 'resumen', nivel: 'intermedio', titulo: 'Tendencia mensual por especialidad' },
+  {
+    clave: 'resumen.sala',
+    pagina: 'resumen',
+    nivel: 'intermedio',
+    titulo: 'Sala de control: lo más relevante del período, lo que requiere atención y la tendencia de cada indicador',
+  },
+  { clave: 'metas.editar', pagina: 'resumen', nivel: 'full', titulo: 'Definir las metas de los indicadores', roles: ['direccion'] },
 
   { clave: 'agenda.periodo', pagina: 'agenda', nivel: 'basico', titulo: 'Citas por estado, especialidad y profesional' },
   { clave: 'agenda.inasistencia', pagina: 'agenda', nivel: 'intermedio', titulo: 'Mapa de la inasistencia y anticipación de cancelaciones' },
@@ -84,6 +91,8 @@ export const FUNCIONES: Funcion[] = [
 
   { clave: 'alertas.conteo', pagina: 'alertas', nivel: 'basico', titulo: 'Número de alertas activas' },
   { clave: 'alertas.panel', pagina: 'alertas', nivel: 'intermedio', titulo: 'Alertas operativas y salud de los datos' },
+  { clave: 'alertas.revisar', pagina: 'alertas', nivel: 'intermedio', titulo: 'Marcar alertas como revisadas', roles: ['direccion', 'operacion'] },
+  { clave: 'confianza', pagina: null, nivel: 'intermedio', titulo: 'Índice de confianza de los datos' },
 
   { clave: 'exportar.csv', pagina: null, nivel: 'intermedio', titulo: 'Descargar tablas en CSV' },
   {
@@ -109,6 +118,10 @@ export const ENDPOINTS: Record<string, string> = {
   'GET /api/resumen/series': 'resumen.kpis',
   'GET /api/resumen/metas': 'resumen.metas',
   'GET /api/resumen/tendencia': 'resumen.tendencia',
+  'GET /api/resumen/sala': 'resumen.sala',
+  'GET /api/metas': 'resumen.metas',
+  'PUT /api/metas': 'metas.editar',
+  'GET /api/confianza': 'confianza',
 
   'GET /api/agenda': 'agenda.periodo',
   'GET /api/agenda/inasistencia': 'agenda.inasistencia',
@@ -147,6 +160,7 @@ export const ENDPOINTS: Record<string, string> = {
   'GET /api/alertas/conteo': 'alertas.conteo',
   'GET /api/alertas': 'alertas.panel',
   'GET /api/alertas/salud': 'alertas.panel',
+  'POST /api/alertas/revisar': 'alertas.revisar',
   'GET /api/sistema': 'alertas.panel',
 
   'GET /api/plan': 'plan.ver',
@@ -163,8 +177,6 @@ export const TAM_MAX_SIN_EXPORTAR = 100;
 
 /** Funcionalidades del plan Full que todavía no existen (se muestran como "en desarrollo" en Mi plan). */
 export const PROXIMAMENTE: { titulo: string; nivel: Nivel }[] = [
-  { titulo: 'Sala de control: lo más relevante del período y lo que requiere atención', nivel: 'intermedio' },
-  { titulo: 'Índice de confianza de los datos', nivel: 'intermedio' },
   { titulo: 'Horas de recepción ahorradas por el bot y oportunidades de mejora', nivel: 'full' },
   { titulo: 'Centro de capacidad de la agenda y cupos recuperables', nivel: 'full' },
   { titulo: 'Informe ejecutivo mensual en PDF', nivel: 'full' },

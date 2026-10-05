@@ -4,7 +4,7 @@
 // Las alertas solo se ven en la consola de soporte; no se envían por correo ni por mensaje (decisión de German).
 import { pool, poolApp, query, queryApp, queryOne } from './db.js';
 import { erroresRecientes } from './acceso.js';
-import { alertasActivas } from './routes/alertas.js';
+import { ENLACE_ALERTA, alertasActivas } from './routes/alertas.js';
 import { HOY } from './sql.js';
 
 export type Grupo = 'disponibilidad' | 'despliegue' | 'integraciones' | 'lista_espera' | 'panel';
@@ -191,14 +191,6 @@ const REGLAS: { nombre: string; grupo: Grupo; fn: Regla }[] = [
     nombre: 'Alertas operativas (campañas, WhatsApp, Globho)',
     grupo: 'integraciones',
     fn: async (out) => {
-      const enlaces: Record<string, string> = {
-        campana_no_corrio: '#/campanas?t=ejecuciones',
-        campana_sin_envios: '#/campanas?t=ejecuciones',
-        fallo_envio_alto: '#/campanas',
-        scraper_sin_actualizar: '#/alertas',
-        bot_sin_conversaciones: '#/chatbot',
-        errores_bot: '#/alertas',
-      };
       const impactos: Record<string, string> = {
         campana_no_corrio: 'Los pacientes no reciben ese recordatorio. Revisar el contenedor cron y el endpoint de campañas del bot.',
         campana_sin_envios: 'Revisar el token de Meta, la plantilla o los logs del bot.',
@@ -215,7 +207,7 @@ const REGLAS: { nombre: string; grupo: Grupo; fn: Regla }[] = [
           titulo: a.titulo,
           detalle: a.detalle,
           impacto: impactos[a.alerta] ?? 'Ver la pantalla Alertas.',
-          enlace: enlaces[a.alerta] ?? '#/alertas',
+          enlace: ENLACE_ALERTA[a.alerta] ?? '#/alertas',
         });
       }
     },
@@ -388,6 +380,7 @@ async function limpiar() {
   try {
     await queryApp(`DELETE FROM panel.actividad WHERE at < now() - interval '180 days'`);
     await queryApp(`DELETE FROM panel.alertas WHERE estado = 'resuelta' AND resuelta_at < now() - interval '180 days'`);
+    await queryApp(`DELETE FROM panel.alertas_cliente_revisadas WHERE revisada_at < now() - interval '30 days'`);
   } catch (e) {
     console.error('Vigilante: no se pudo limpiar el historial:', (e as Error).message);
   }
