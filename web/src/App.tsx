@@ -13,6 +13,7 @@ import Profesionales from './pages/Profesionales';
 import Capacidad from './pages/Capacidad';
 import MiAgenda from './pages/MiAgenda';
 import { InformeMensual, ResumenSemanal } from './pages/Informe';
+import Inteligencia from './pages/Inteligencia';
 import MiPlan from './pages/MiPlan';
 import Soporte from './pages/Soporte';
 import { IncidentesCtx, type Incidente } from './incidentes';
@@ -35,6 +36,7 @@ const PAGINAS: Pagina[] = [
   { ruta: 'resumen', titulo: 'Resumen', desc: 'Lo más importante del período', Comp: Resumen, conRango: true, funcion: 'resumen.kpis' },
   { ruta: 'informe', titulo: 'Informe mensual', desc: 'Informe ejecutivo del mes para imprimir o guardar en PDF', Comp: InformeMensual, conRango: false, funcion: 'informe.mensual' },
   { ruta: 'semanal', titulo: 'Resumen semanal', desc: 'Lo más importante de la semana pasada, listo cada lunes', Comp: ResumenSemanal, conRango: false, funcion: 'informe.semanal' },
+  { ruta: 'inteligencia', titulo: 'Inteligencia', desc: 'Predicción de inasistencia, pacientes que se alejan, días fuera de lo normal y simulador', Comp: Inteligencia, conRango: true, funcion: 'inteligencia.anomalias' },
   { ruta: 'campanas', titulo: 'Campañas', desc: 'Mensajes automáticos de WhatsApp y sus resultados', Comp: Campanas, conRango: true, funcion: 'campanas.resultados' },
   { ruta: 'agenda', titulo: 'Agenda', desc: 'Citas por estado, profesional y especialidad', Comp: Agenda, conRango: true, funcion: 'agenda.periodo' },
   { ruta: 'capacidad', titulo: 'Capacidad', desc: 'Dónde sobra y dónde falta agenda, cuánto se espera y qué se puede recuperar', Comp: Capacidad, conRango: true, funcion: 'capacidad.centro' },
@@ -139,7 +141,7 @@ export default function App() {
 
 /** Grupos del menú (Etapa 2). Cada persona ve solo las pantallas de su rol; los grupos vacíos no se muestran. */
 const GRUPOS: { clave: string; titulo: string; paginas: string[] }[] = [
-  { clave: 'direccion', titulo: 'Dirección', paginas: ['resumen', 'semanal', 'informe'] },
+  { clave: 'direccion', titulo: 'Dirección', paginas: ['resumen', 'semanal', 'informe', 'inteligencia'] },
   { clave: 'operacion', titulo: 'Operación', paginas: ['mi-agenda', 'agenda', 'capacidad', 'profesionales', 'lista-espera', 'alertas'] },
   { clave: 'relacion', titulo: 'Relación con pacientes', paginas: ['campanas', 'chatbot', 'pacientes', 'marketing'] },
   { clave: 'cuenta', titulo: 'Su cuenta', paginas: ['plan', 'soporte'] },

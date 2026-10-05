@@ -18,6 +18,7 @@ const SECCIONES: [string | null, string][] = [
   ['resumen', 'Resumen'],
   ['semanal', 'Resumen semanal'],
   ['informe', 'Informe mensual'],
+  ['inteligencia', 'Inteligencia'],
   ['agenda', 'Agenda'],
   ['capacidad', 'Capacidad'],
   ['profesionales', 'Profesionales'],

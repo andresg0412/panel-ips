@@ -14,6 +14,7 @@ import { alertasConEstado } from './alertas.js';
 import { INDICADORES, leerMetas } from '../metas.js';
 import { horasDe, leerParametros, minutosAhorrados } from '../parametros.js';
 import { rangoNivel } from '../funciones.js';
+import { anomalias, enlaceAnomalia } from './inteligencia.js';
 
 type N = Record<string, number>;
 
@@ -313,7 +314,7 @@ async function relevante(r: Rango, baseP: Promise<Base>, conHoras: boolean) {
 }
 
 // ---------------------------------------------------------------------------- qué requiere atención
-async function atencion(r: Rango) {
+async function atencion(r: Rango, conAnomalias: boolean) {
   const [alertas, datos, proximas] = await Promise.all([
     alertasConEstado(),
     datosResumen(r),
@@ -354,6 +355,13 @@ async function atencion(r: Rango) {
       texto: `Mañana hay ${num(proximas.manana)} citas; ${num(proximas.manana_pendientes)} siguen sin confirmar.`,
       enlace: '#/agenda?t=proximas',
     });
+  }
+  // Anomalías (Etapa 6, plan Full): días de la última semana fuera de lo normal que empeoran algo.
+  if (conAnomalias) {
+    const desde = sumarDias(hoyBogota(), -7);
+    for (const a of (await anomalias().catch(() => [])).filter((x) => x.fecha >= desde && x.tono === 'negativo').slice(0, 3)) {
+      items.push({ clave: `anomalia:${a.clave}`, severidad: 'media', texto: `Fuera de lo normal: ${a.texto.replace(/\*\*/g, '')}`, enlace: enlaceAnomalia(a) });
+    }
   }
   const orden = { alta: 0, media: 1, info: 2 };
   return items.sort((x, y) => orden[x.severidad] - orden[y.severidad]);
@@ -491,7 +499,7 @@ export default async function rutasSala(app: FastifyInstance) {
       baseP.catch(() => {});
       // Depende solo del nivel (que va en la clave de la caché), no del rol.
       const conHoras = rangoNivel(req.contexto?.nivel ?? 'full') >= rangoNivel('full');
-      const [tendencia, frases, items] = await Promise.all([semanas(r.hasta, baseP), relevante(r, baseP, conHoras), atencion(r)]);
+      const [tendencia, frases, items] = await Promise.all([semanas(r.hasta, baseP), relevante(r, baseP, conHoras), atencion(r, conHoras)]);
       return { tendencia, relevante: frases, atencion: items };
     }, 300_000);
   });

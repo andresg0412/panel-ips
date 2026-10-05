@@ -60,12 +60,16 @@ const rutas = [
   './routes/plan.js', './routes/resumen.js', './routes/campanas.js', './routes/agenda.js', './routes/chatbot.js',
   './routes/listaEspera.js', './routes/pacientes.js', './routes/sistema.js', './routes/profesionales.js',
   './routes/alertas.js', './routes/campanas2.js', './routes/oleada2.js', './routes/soporte.js', './routes/sala.js',
-  './routes/historias.js', './routes/capacidad.js', './routes/informe.js',
+  './routes/historias.js', './routes/capacidad.js', './routes/informe.js', './routes/inteligencia.js',
 ];
 for (const r of rutas) await app.register((await import(r)).default);
 
 const { iniciarVigilante } = await import('./vigilante.js');
 const detenerVigilante = iniciarVigilante();
+
+// Entrena el modelo de inasistencia en segundo plano (tarda unos segundos), para que la primera consulta no espere.
+const { modeloInasistencia } = await import('./prediccion.js');
+setTimeout(() => void modeloInasistencia().catch((e) => app.log.warn(e, 'no se pudo entrenar el modelo de inasistencia')), 30_000).unref();
 
 // Frontend compilado (dist/web). En desarrollo lo sirve Vite con proxy a /api.
 const webDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'web');

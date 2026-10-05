@@ -15,18 +15,18 @@ export const MAX_USUARIOS: Record<Nivel, number | null> = { basico: 1, intermedi
 
 export type Pagina =
   | 'resumen' | 'campanas' | 'agenda' | 'capacidad' | 'profesionales' | 'chatbot' | 'lista-espera' | 'pacientes' | 'marketing'
-  | 'alertas' | 'plan' | 'mi-agenda' | 'informe' | 'semanal' | 'soporte';
+  | 'alertas' | 'plan' | 'mi-agenda' | 'informe' | 'semanal' | 'inteligencia' | 'soporte';
 
 export type Rol = 'direccion' | 'operacion' | 'analista' | 'relacion' | 'profesional' | 'soporte';
 export const esRol = (v: unknown): v is Rol => typeof v === 'string' && v in ROLES;
 
-const CLIENTE: Pagina[] = ['resumen', 'informe', 'semanal', 'campanas', 'agenda', 'capacidad', 'profesionales', 'chatbot', 'lista-espera', 'pacientes', 'marketing', 'alertas', 'plan'];
+const CLIENTE: Pagina[] = ['resumen', 'informe', 'semanal', 'inteligencia', 'campanas', 'agenda', 'capacidad', 'profesionales', 'chatbot', 'lista-espera', 'pacientes', 'marketing', 'alertas', 'plan'];
 
 export const ROLES: Record<Rol, { nombre: string; inicio: Pagina; paginas: Pagina[] }> = {
   direccion: { nombre: 'Dirección', inicio: 'resumen', paginas: CLIENTE },
   analista: { nombre: 'Analista', inicio: 'resumen', paginas: CLIENTE },
-  operacion: { nombre: 'Operación', inicio: 'agenda', paginas: ['agenda', 'capacidad', 'profesionales', 'lista-espera', 'alertas'] },
-  relacion: { nombre: 'Relación con pacientes', inicio: 'campanas', paginas: ['campanas', 'chatbot', 'pacientes', 'marketing', 'alertas'] },
+  operacion: { nombre: 'Operación', inicio: 'agenda', paginas: ['agenda', 'capacidad', 'inteligencia', 'profesionales', 'lista-espera', 'alertas'] },
+  relacion: { nombre: 'Relación con pacientes', inicio: 'campanas', paginas: ['campanas', 'chatbot', 'pacientes', 'marketing', 'inteligencia', 'alertas'] },
   // "Mi agenda": solo los datos del profesional vinculado al usuario (Etapa 4), más los agregados generales.
   profesional: { nombre: 'Profesional', inicio: 'mi-agenda', paginas: ['mi-agenda', 'resumen'] },
   soporte: { nombre: 'Soporte', inicio: 'soporte', paginas: [...CLIENTE, 'mi-agenda', 'soporte'] },
@@ -79,6 +79,23 @@ export const FUNCIONES: Funcion[] = [
     titulo: 'Centro de capacidad: cupos ofrecidos y ocupados, capacidad sin usar por día y hora, y días de espera',
   },
   { clave: 'capacidad.recuperables', pagina: 'capacidad', nivel: 'full', titulo: 'Citas recuperables con la lista de espera' },
+
+  {
+    clave: 'inteligencia.prediccion',
+    pagina: 'inteligencia',
+    nivel: 'full',
+    titulo: 'Predicción de inasistencia: citas de los próximos días con riesgo alto, para priorizar recordatorios',
+    roles: ['direccion', 'analista', 'operacion'],
+  },
+  {
+    clave: 'inteligencia.abandono',
+    pagina: 'inteligencia',
+    nivel: 'full',
+    titulo: 'Pacientes que se están alejando, priorizados para invitarlos a volver',
+    roles: ['direccion', 'analista', 'relacion'],
+  },
+  { clave: 'inteligencia.anomalias', pagina: 'inteligencia', nivel: 'full', titulo: 'Detección automática de días fuera de lo normal' },
+  { clave: 'inteligencia.simulador', pagina: 'inteligencia', nivel: 'full', titulo: 'Simulador: qué pasaría si mejora la asistencia, la ocupación o la lista de espera', roles: ['direccion', 'analista'] },
 
   { clave: 'miagenda.ver', pagina: 'mi-agenda', nivel: 'intermedio', titulo: 'Mi agenda: citas, pacientes que faltan y ocupación de cada profesional' },
 
@@ -170,6 +187,9 @@ export const ENDPOINTS: Record<string, string> = {
   'GET /api/capacidad/cancelaciones': 'capacidad.cancelaciones',
   'GET /api/capacidad/modalidad': 'capacidad.modalidad',
   'GET /api/mi-agenda': 'miagenda.ver',
+  'GET /api/inteligencia/prediccion': 'inteligencia.prediccion',
+  'GET /api/inteligencia/abandono': 'inteligencia.abandono',
+  'GET /api/inteligencia/anomalias': 'inteligencia.anomalias',
 
   'GET /api/profesionales': 'profesionales.lista',
   'GET /api/profesionales/ficha': 'profesionales.ficha',
@@ -223,5 +243,5 @@ export const TAM_MAX_SIN_EXPORTAR = 100;
 
 /** Funcionalidades del plan Full que todavía no existen (se muestran como "en desarrollo" en Mi plan). */
 export const PROXIMAMENTE: { titulo: string; nivel: Nivel }[] = [
-  { titulo: 'Predicción de inasistencia y detección de anomalías', nivel: 'full' },
+  { titulo: 'Asistente de preguntas con inteligencia artificial', nivel: 'full' },
 ];
