@@ -63,21 +63,26 @@ export function rangoAnterior(r: Rango): Rango {
   return { desde: ini, hasta: fin };
 }
 
-export function Pestanas<T extends string>({ opciones, valor, onCambio, bloqueadas = [] }: {
+export function Pestanas<T extends string>({ opciones, valor, onCambio, bloqueadas = [], descripciones }: {
   opciones: [T, string][];
   valor: T;
   onCambio: (v: T) => void;
   /** Pestañas que el plan no incluye: se ven con candado y al abrirlas muestran la vista previa bloqueada. */
   bloqueadas?: T[];
+  /** Explicación breve de lo que responde cada vista, mostrada solo para la pestaña activa. */
+  descripciones?: Partial<Record<T, string>>;
 }) {
   return (
-    <div className="pestanas" role="tablist">
-      {opciones.map(([k, t]) => (
-        <button key={k} role="tab" aria-selected={valor === k} className={valor === k ? 'activo' : ''} onClick={() => onCambio(k)}>
-          {t}
-          {bloqueadas.includes(k) && <Candado titulo="No incluido en su plan" />}
-        </button>
-      ))}
+    <div className="pestanas-wrap">
+      <div className="pestanas" role="tablist">
+        {opciones.map(([k, t]) => (
+          <button key={k} role="tab" aria-selected={valor === k} aria-controls={`panel-${k}`} className={valor === k ? 'activo' : ''} onClick={() => onCambio(k)}>
+            {t}
+            {bloqueadas.includes(k) && <Candado titulo="No incluido en su plan" />}
+          </button>
+        ))}
+      </div>
+      {descripciones?.[valor] && <p className="pestana-ayuda" id={`panel-${valor}`}>{descripciones[valor]}</p>}
     </div>
   );
 }

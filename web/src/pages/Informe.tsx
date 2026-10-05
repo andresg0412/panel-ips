@@ -124,14 +124,22 @@ function recomendar(d: {
 }
 
 // --------------------------------------------------------------------------------------------- hoja
-function Hoja({ titulo, children, numero }: { titulo?: string; children: ReactNode; numero?: number }) {
+function Hoja({ titulo, children, numero, id }: { titulo?: string; children: ReactNode; numero?: number; id?: string }) {
   return (
-    <section className="informe-hoja">
+    <section className="informe-hoja" id={id}>
       {titulo && <h2 className="informe-h2">{titulo}</h2>}
       {children}
       {numero !== undefined && <div className="informe-pie">Página {numero}</div>}
     </section>
   );
+}
+
+/**
+ * Entrada del índice: desplaza hasta la sección sin tocar la URL. Un href="#seccion" no sirve aquí porque el
+ * panel usa el hash como ruta (#/pantalla) y el clic llevaría a la pantalla de inicio.
+ */
+function IrA({ id, children }: { id: string; children: ReactNode }) {
+  return <button type="button" onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{children}</button>;
 }
 
 function Bloque({ titulo, children, nota }: { titulo: string; children: ReactNode; nota?: string }) {
@@ -248,6 +256,13 @@ function Contenido({ tipo, periodo, ctx }: { tipo: Tipo; periodo: string; ctx: C
           <div className="informe-tipo">{mensual ? 'Informe mensual de gestión' : 'Resumen semanal de la gerencia'}</div>
           <h1 className="informe-titulo">{tituloPeriodo(tipo, periodo).charAt(0).toUpperCase() + tituloPeriodo(tipo, periodo).slice(1)}</h1>
           <p className="informe-sub">{ctx.ips}</p>
+          <nav className="informe-indice" aria-label="Índice del informe">
+            <strong>En este informe</strong>
+            <IrA id="informe-resumen">Resumen para la gerencia</IrA>
+            {mensual && <IrA id="informe-citas">Citas y asistencia</IrA>}
+            <IrA id="informe-whatsapp">{mensual ? 'Campañas y asistente de WhatsApp' : 'Lo que hizo el bot'}</IrA>
+            <IrA id="informe-alertas">{mensual ? 'Alertas, lista de espera y confianza de los datos' : 'Para esta semana'}</IrA>
+          </nav>
         </div>
         <div className="informe-portada-pie">
           <span>Del {fecha(rango.desde)} al {fecha(rango.hasta)}</span>
@@ -257,7 +272,7 @@ function Contenido({ tipo, periodo, ctx }: { tipo: Tipo; periodo: string; ctx: C
       </section>
 
       {/* Página 1: para la gerencia */}
-      <Hoja titulo="Resumen para la gerencia" numero={pagina++}>
+      <Hoja id="informe-resumen" titulo="Resumen para la gerencia" numero={pagina++}>
         <div className="kpis-principales informe-kpis">
           <KpiPrincipal etiqueta="Citas atendidas" valor={a.citas.asistio} anterior={p?.citas.asistio} comparacion={compTxt} meta={meta('atendidas')} sinMeta={sinMeta('atendidas')} serie={serie('atendidas')} definicion={DEF.atendidas} />
           <KpiPrincipal etiqueta="Tasa de asistencia" formato="pct" valor={asistencia(a.citas)} anterior={p ? asistencia(p.citas) : undefined} comparacion={compTxt} meta={meta('asistencia')} serie={serie('asistencia')} definicion={DEF.asistencia} />
@@ -282,7 +297,7 @@ function Contenido({ tipo, periodo, ctx }: { tipo: Tipo; periodo: string; ctx: C
 
       {/* Detalle: citas */}
       {mensual && (
-        <Hoja titulo="Citas y asistencia" numero={pagina++}>
+        <Hoja id="informe-citas" titulo="Citas y asistencia" numero={pagina++}>
           <Bloque titulo="Citas del mes por estado" nota="Por semana, según la fecha de la cita. Sin reuniones internas.">
             <Grafico opcion={optCitas} alto={240} />
           </Bloque>
@@ -316,7 +331,7 @@ function Contenido({ tipo, periodo, ctx }: { tipo: Tipo; periodo: string; ctx: C
       )}
 
       {/* Detalle: WhatsApp */}
-      <Hoja titulo={mensual ? 'Campañas y asistente de WhatsApp' : 'Lo que hizo el bot'} numero={pagina++}>
+      <Hoja id="informe-whatsapp" titulo={mensual ? 'Campañas y asistente de WhatsApp' : 'Lo que hizo el bot'} numero={pagina++}>
         {mensual && embR.data && embE.data && (
           <>
             <Bloque titulo="Recordatorio de 48 horas: del mensaje a la cita">
@@ -370,7 +385,7 @@ function Contenido({ tipo, periodo, ctx }: { tipo: Tipo; periodo: string; ctx: C
       </Hoja>
 
       {/* Alertas y confianza */}
-      <Hoja titulo={mensual ? 'Alertas, lista de espera y confianza de los datos' : 'Para esta semana'} numero={pagina++}>
+      <Hoja id="informe-alertas" titulo={mensual ? 'Alertas, lista de espera y confianza de los datos' : 'Para esta semana'} numero={pagina++}>
         <div className="informe-dos">
           <Bloque titulo="Primera cita disponible" nota={`A la fecha de generación (${fecha(ctx.hoy)}), según el horario registrado.`}>
             {cap.data!.espera.length ? (

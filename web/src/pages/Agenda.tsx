@@ -111,12 +111,19 @@ export default function Agenda({ rango }: { rango: Rango }) {
       <Pestanas<Vista>
         bloqueadas={bloqueadas}
         opciones={[
-          ['periodo', 'Período'],
-          ['proximas', 'Próximas semanas'],
-          ['inasistencia', 'Inasistencia'],
-          ['tendencias', 'Tendencias'],
-          ['calidad', 'Calidad de los datos'],
+          ['periodo', '¿Cómo estuvo la agenda?'],
+          ['proximas', '¿Qué viene próximamente?'],
+          ['inasistencia', '¿Dónde están faltando?'],
+          ['tendencias', '¿Cómo está cambiando?'],
+          ['calidad', '¿Hay problemas en los datos?'],
         ]}
+        descripciones={{
+          periodo: 'Esta vista muestra las citas del período seleccionado agrupadas por estado.',
+          proximas: 'Aquí puede anticipar la demanda y las citas programadas para las próximas semanas.',
+          inasistencia: 'Identifique los días y horarios donde más pacientes dejan de asistir.',
+          tendencias: 'Compare la evolución de la agenda y la asistencia a lo largo del tiempo.',
+          calidad: 'Revise cambios, registros pendientes y señales que pueden afectar la interpretación.',
+        }}
         valor={vista}
         onCambio={setVista}
       />

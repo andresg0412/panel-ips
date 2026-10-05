@@ -81,6 +81,24 @@ export function Tarjeta({ titulo, ayuda, children, accion, marcas }: {
   );
 }
 
+/** Agrupa el detalle sin eliminarlo de la pantalla: la portada puede orientar primero y explorar después. */
+export function BloqueDetalle({ titulo, resumen, children, abierto = false }: {
+  titulo: string;
+  resumen?: string;
+  children: ReactNode;
+  abierto?: boolean;
+}) {
+  return (
+    <details className="bloque-detalle" open={abierto}>
+      <summary>
+        <span>{titulo}</span>
+        {resumen && <small>{resumen}</small>}
+      </summary>
+      <div className="bloque-detalle-contenido">{children}</div>
+    </details>
+  );
+}
+
 /**
  * Indicador con comparación contra el período anterior.
  * `mejorSiSube=false` para métricas donde subir es malo (cancelaciones, abandono).
@@ -207,6 +225,10 @@ export function descargarCsv<T>(nombre: string, filas: T[], cols: Columna<T>[], 
   URL.revokeObjectURL(a.href);
 }
 
+/** Filas visibles antes de "Ver todas" y columnas mínimas para ofrecer el selector de columnas. */
+const FILAS_INICIALES = 10;
+const COLUMNAS_PARA_SELECTOR = 5;
+
 export function Tabla<T extends Record<string, any>>({ filas, columnas, nombreCsv, alFila, vacio = 'Sin datos para este período' }: {
   filas: T[];
   columnas: Columna<T>[];
@@ -215,7 +237,13 @@ export function Tabla<T extends Record<string, any>>({ filas, columnas, nombreCs
   vacio?: string;
 }) {
   const [orden, setOrden] = useState<{ col: number; asc: boolean } | null>(null);
+  const [mostrarTodas, setMostrarTodas] = useState(false);
+  const [selectorAbierto, setSelectorAbierto] = useState(false);
+  const [columnasVisibles, setColumnasVisibles] = useState<number[]>(() => columnas.map((_, i) => i));
   const { puede, visible, nivelDe, nombreNivel } = useAcceso();
+  const columnasActivas = columnas.filter((_, i) => columnasVisibles.includes(i));
+  // El selector de columnas solo aporta en tablas anchas; en las cortas sería un botón más sin uso.
+  const conSelector = columnas.length >= COLUMNAS_PARA_SELECTOR;
   const ordenadas = useMemo(() => {
     if (!orden) return filas;
     const c = columnas[orden.col];
@@ -232,11 +260,36 @@ export function Tabla<T extends Record<string, any>>({ filas, columnas, nombreCs
 
   return (
     <>
+      {conSelector && (
+        <div className="tabla-controles">
+          <button className="boton boton-secundario" onClick={() => setSelectorAbierto((v) => !v)} aria-expanded={selectorAbierto}>
+            {selectorAbierto ? 'Cerrar columnas' : 'Elegir columnas'}
+          </button>
+          {selectorAbierto && (
+            <fieldset className="tabla-columnas">
+              <legend>Columnas visibles</legend>
+              {columnas.map((c, i) => (
+                <label key={i}>
+                  <input
+                    type="checkbox"
+                    checked={columnasVisibles.includes(i)}
+                    disabled={columnasVisibles.length === 1 && columnasVisibles.includes(i)}
+                    onChange={() => setColumnasVisibles((actuales) => actuales.includes(i) ? actuales.filter((x) => x !== i) : [...actuales, i].sort((a, b) => a - b))}
+                  />
+                  {c.titulo}
+                </label>
+              ))}
+            </fieldset>
+          )}
+        </div>
+      )}
       <div className="tabla-wrap">
         <table>
           <thead>
             <tr>
-              {columnas.map((c, ci) => (
+              {columnasActivas.map((c) => {
+                const ci = columnas.indexOf(c);
+                return (
                 <th
                   key={ci}
                   className={c.num ? 'num' : ''}
@@ -245,22 +298,25 @@ export function Tabla<T extends Record<string, any>>({ filas, columnas, nombreCs
                   {c.titulo}
                   {orden?.col === ci ? (orden.asc ? ' ▲' : ' ▼') : ''}
                 </th>
-              ))}
+                );
+              })}
             </tr>
           </thead>
           <tbody>
             {ordenadas.length === 0 ? (
               <tr>
-                <td colSpan={columnas.length} className="celda-vacia">
+                <td colSpan={columnasActivas.length} className="celda-vacia">
                   {vacio}
                   {vacio === 'Sin datos para este período' && <span> · Pruebe con un período más largo.</span>}
                 </td>
               </tr>
             ) : (
+              // Todas las filas van en la página (así se imprimen completas); en pantalla, las que pasan
+              // de FILAS_INICIALES se ocultan con .fila-extra hasta pulsar "Ver todas".
               ordenadas.map((f, i) => (
-                <tr key={i} onClick={alFila ? () => alFila(f) : undefined} className={alFila ? 'resultado-busqueda' : ''}>
-                  {columnas.map((c, ci) => (
-                    <td key={ci} className={c.num ? 'num' : ''} style={c.envolver ? { whiteSpace: 'normal', minWidth: 200 } : undefined}>
+                <tr key={i} onClick={alFila ? () => alFila(f) : undefined} className={[alFila ? 'resultado-busqueda' : '', !mostrarTodas && i >= FILAS_INICIALES ? 'fila-extra' : ''].filter(Boolean).join(' ') || undefined}>
+                  {columnasActivas.map((c) => (
+                    <td key={columnas.indexOf(c)} className={c.num ? 'num' : ''} style={c.envolver ? { whiteSpace: 'normal', minWidth: 200 } : undefined}>
                       {c.formato ? c.formato(f[c.clave], f) : c.num ? num(f[c.clave]) : String(f[c.clave] ?? '—')}
                     </td>
                   ))}
@@ -270,12 +326,14 @@ export function Tabla<T extends Record<string, any>>({ filas, columnas, nombreCs
           </tbody>
         </table>
       </div>
-      {nombreCsv && filas.length > 0 && (
+      {filas.length > 0 && (
         <div className="tabla-pie">
-          <span>{num(filas.length)} filas</span>
-          {puede('exportar.csv') ? (
+          <span className="solo-pantalla">{mostrarTodas || filas.length <= FILAS_INICIALES ? `${num(filas.length)} filas` : `Mostrando ${FILAS_INICIALES} de ${num(filas.length)} filas`}</span>
+          <span className="solo-impresion">{num(filas.length)} filas</span>
+          {filas.length > FILAS_INICIALES && <button className="boton boton-secundario" onClick={() => setMostrarTodas((v) => !v)}>{mostrarTodas ? 'Mostrar menos' : 'Ver todas'}</button>}
+          {nombreCsv && puede('exportar.csv') ? (
             <button className="boton" onClick={() => descargarCsv(nombreCsv, ordenadas, columnas)}>Descargar CSV</button>
-          ) : visible('exportar.csv') ? (
+          ) : nombreCsv && visible('exportar.csv') ? (
             <span className="boton boton-bloqueado" title={`Descargar CSV: disponible en el plan ${nombreNivel(nivelDe('exportar.csv'))}`}>
               <Candado /> Descargar CSV
             </span>

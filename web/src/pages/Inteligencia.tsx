@@ -310,10 +310,21 @@ export default function Inteligencia({ rango }: { rango: Rango }) {
   const vistas = (Object.keys(FUNCION) as Vista[]).filter((v) => visible(FUNCION[v][0]));
   const [vista, setVista] = usePestana<Vista>(vistas, vistas.find((v) => puede(FUNCION[v][0])) ?? vistas[0] ?? 'anomalias');
   const bloqueadas = vistas.filter((v) => !puede(FUNCION[v][0]));
-  const NOMBRES: Record<Vista, string> = { prediccion: 'Predicción de inasistencia', abandono: 'Pacientes que se alejan', anomalias: 'Días fuera de lo normal', simulador: '¿Qué pasaría si…?' };
+  const NOMBRES: Record<Vista, string> = { prediccion: '¿Quién podría faltar?', abandono: '¿Quién se está alejando?', anomalias: '¿Qué días están fuera de lo normal?', simulador: '¿Qué pasaría si…?' };
   return (
     <>
-      <Pestanas<Vista> bloqueadas={bloqueadas} opciones={vistas.map((v) => [v, NOMBRES[v]] as [Vista, string])} valor={vista} onCambio={setVista} />
+      <Pestanas<Vista>
+        bloqueadas={bloqueadas}
+        opciones={vistas.map((v) => [v, NOMBRES[v]] as [Vista, string])}
+        descripciones={{
+          prediccion: 'Anticipe qué pacientes podrían no asistir para actuar antes de la cita.',
+          abandono: 'Detecte pacientes cuya actividad está disminuyendo y priorice su seguimiento.',
+          anomalias: 'Encuentre días que se comportan de forma distinta a lo habitual.',
+          simulador: 'Explore cómo cambiarían los resultados si modifica algunos supuestos.',
+        }}
+        valor={vista}
+        onCambio={setVista}
+      />
       {bloqueadas.includes(vista) ? (
         <Bloqueado clave={FUNCION[vista][0]} titulo={FUNCION[vista][1]} alto={280} />
       ) : (

@@ -58,11 +58,11 @@ function TarjetaAlerta({ a, onCambio }: { a: Alerta; onCambio: () => void }) {
         <span className="punto" style={{ background: e.color }} />
         <span>{a.revisada ? '✓ Revisada' : `${e.icono} ${e.texto}`}</span>
       </div>
-      <div style={{ fontWeight: 600, marginBottom: 4 }}>{a.titulo}</div>
-      <div className="delta">{a.detalle}</div>
+      <div className="alerta-campo"><b>Qué pasó:</b> {a.titulo}</div>
+      <div className="alerta-campo"><b>Detalle:</b> {a.detalle}</div>
       {a.revisada && <div className="delta" style={{ marginTop: 4 }}>Revisada por {a.revisada.por} · {fechaHora(a.revisada.at)}</div>}
       <div className="campanita-acciones" style={{ marginTop: 8 }}>
-        {pagina !== 'alertas' && yo?.paginas[pagina]?.estado === 'ok' && <a href={a.enlace}>Investigar</a>}
+        {pagina !== 'alertas' && yo?.paginas[pagina]?.estado === 'ok' && <a href={a.enlace}>Investigar y resolver</a>}
         {puede('alertas.revisar') && (
           <button className="enlace" disabled={ocupado} onClick={() => marcar(!a.revisada)}>{a.revisada ? 'Marcar pendiente' : 'Marcar revisada'}</button>
         )}
@@ -109,6 +109,7 @@ function AlertasPanel({ rango }: { rango: Rango }) {
   const conf = useApi<Confianza>(puede('confianza') ? conRango('/api/confianza', rango) : null, 300_000);
   const salud = useApi<Salud>(conRango('/api/alertas/salud', rango), 300_000);
   const sombras = useSombras(['general']);
+  const [filtro, setFiltro] = useState<'todas' | 'criticas' | 'importantes'>('todas');
 
   // SIS-02: cinco series diarias con su propia escala; un hueco o un salto se ve a simple vista.
   const optSalud = useCallback(() => {
@@ -145,11 +146,16 @@ function AlertasPanel({ rango }: { rango: Rango }) {
             ayuda="Se revisan cada minuto: campañas que no corrieron o no enviaron, envíos rechazados por WhatsApp, agenda sin sincronizar, bot sin conversaciones y picos de errores."
           >
             {data.activas.length ? (
+              <>
+              <div className="alertas-filtros" role="group" aria-label="Prioridad de las alertas">
+                {(['todas', 'criticas', 'importantes'] as const).map((f) => <button key={f} className={`boton ${filtro === f ? 'activo' : ''}`} onClick={() => setFiltro(f)}>{f === 'todas' ? 'Todas' : f === 'criticas' ? 'Críticas' : 'Importantes'} ({data.activas.filter((a) => f === 'todas' || (f === 'criticas' ? a.severidad === 'alta' : a.severidad === 'media')).length})</button>)}
+              </div>
               <div className="kpis" style={{ marginBottom: 0 }}>
-                {data.activas.map((a) => (
+                {data.activas.filter((a) => filtro === 'todas' || (filtro === 'criticas' ? a.severidad === 'alta' : a.severidad === 'media')).map((a) => (
                   <TarjetaAlerta key={a.clave} a={a} onCambio={recargar} />
                 ))}
               </div>
+              </>
             ) : (
               <div className="estado">
                 <span className="punto" style={{ background: 'var(--good)' }} />✓ Todo funcionando: no hay alertas activas.

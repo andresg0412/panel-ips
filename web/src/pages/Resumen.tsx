@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { conRango, useApi, type Rango } from '../api';
 import Grafico from '../components/Grafico';
 import { barrasApiladas, lineas, pequenosMultiplos, pivotar } from '../components/series';
-import { Esqueleto, Estado, Kpi, ListaConteo, Tarjeta } from '../components/ui';
+import { BloqueDetalle, Esqueleto, Estado, Kpi, ListaConteo, Tarjeta } from '../components/ui';
 import {
   EditorMetas, KpiPrincipal, ListaAtencion, ListaFrases, MedidorConfianza,
   type Confianza, type Frase, type ItemAtencion, type Meta, type MetaKpi,
@@ -57,6 +57,32 @@ export const DEF = {
   conversaciones: 'Conversaciones iniciadas con el asistente de WhatsApp.',
   confirmadas: 'Citas ya ocurridas que el paciente confirmó respondiendo el mensaje de WhatsApp.',
 };
+
+function AccionesRecomendadas({ a }: { a: Indicadores }) {
+  const { yo } = useAcceso();
+  // Solo pantallas que el rol puede abrir, conservando el período elegido (p, o desde/hasta) en el enlace.
+  const periodo = new URLSearchParams(location.hash.split('?')[1] ?? '');
+  periodo.delete('t');
+  const enlace = (ruta: string, pestana?: string) => {
+    const q = new URLSearchParams(periodo);
+    if (pestana) q.set('t', pestana);
+    return `#/${ruta}${q.toString() ? `?${q}` : ''}`;
+  };
+  const acciones = [
+    a.citas.sin_cierre > 0 && { ruta: 'agenda', texto: `Registrar el resultado de ${num(a.citas.sin_cierre)} citas pasadas sin cierre`, enlace: enlace('agenda', 'calidad') },
+    a.citas.canceladas + a.citas.reprogramadas > 0 && { ruta: 'capacidad', texto: 'Revisar cancelaciones y reprogramaciones para recuperar capacidad', enlace: enlace('capacidad', 'cancelaciones') },
+    a.listaEspera.inscripciones > a.listaEspera.aceptadas && { ruta: 'lista-espera', texto: 'Revisar pacientes en lista de espera y ofrecer cupos disponibles', enlace: enlace('lista-espera') },
+    { ruta: 'alertas', texto: 'Revisar alertas y confirmar si hay algo que requiere atención hoy', enlace: enlace('alertas') },
+  ].filter((x): x is { ruta: string; texto: string; enlace: string } => !!x && yo?.paginas[x.ruta]?.estado === 'ok');
+  if (!acciones.length) return null;
+  return (
+    <Tarjeta titulo="Qué hacer ahora" ayuda="Acciones sugeridas a partir de los datos del período.">
+      <ul className="acciones-recomendadas">
+        {acciones.map((x) => <li key={x.ruta}><span>{x.texto}</span><a href={x.enlace}>Revisar</a></li>)}
+      </ul>
+    </Tarjeta>
+  );
+}
 
 export default function Resumen({ rango }: { rango: Rango }) {
   const { puede, yo } = useAcceso();
@@ -145,31 +171,37 @@ export default function Resumen({ rango }: { rango: Rango }) {
             <div className="kpis-principales">
               <KpiPrincipal etiqueta="Citas atendidas" valor={a.citas.asistio} anterior={p?.citas.asistio} comparacion={comp} meta={meta('atendidas')} sinMeta={sinMeta('atendidas')} serie={serie('atendidas')} parcial={parcial} definicion={DEF.atendidas} />
               <KpiPrincipal etiqueta="Tasa de asistencia" formato="pct" valor={asistencia(a.citas)} anterior={p ? asistencia(p.citas) : undefined} comparacion={comp} meta={meta('asistencia')} serie={serie('asistencia')} definicion={DEF.asistencia} />
-              <KpiPrincipal etiqueta="Cancelaciones y reprogramaciones" formato="pct" mejorSiSube={false} valor={noOcurrio(a.citas)} anterior={p ? noOcurrio(p.citas) : undefined} comparacion={comp} meta={meta('no_ocurrieron')} serie={serie('no_ocurrieron')} definicion={DEF.noOcurrieron} />
-              <KpiPrincipal etiqueta="Pacientes nuevos atendidos" valor={md ? md.nuevos.nuevos : null} meta={meta('nuevos')} sinMeta={sinMeta('nuevos')} serie={serie('nuevos')} parcial={parcial} definicion={DEF.nuevos} />
               <KpiPrincipal etiqueta="Ocupación de la agenda" formato="pct" valor={ocupacion} meta={meta('ocupacion')} serie={serie('ocupacion')} definicion={DEF.ocupacion} />
-              <KpiPrincipal etiqueta="Trámites resueltos por WhatsApp" valor={tramites(a)} anterior={p ? tramites(p) : undefined} comparacion={comp} meta={meta('tramites')} sinMeta={sinMeta('tramites')} serie={serie('tramites')} parcial={parcial} definicion={DEF.tramites} />
             </div>
           ) : (
             <div className="kpis-principales">
               <KpiPrincipal etiqueta="Citas atendidas" valor={a.citas.asistio} definicion={DEF.atendidas} />
               <KpiPrincipal etiqueta="Tasa de asistencia" formato="pct" valor={asistencia(a.citas)} definicion={DEF.asistencia} />
-              <KpiPrincipal etiqueta="Cancelaciones y reprogramaciones" formato="pct" mejorSiSube={false} valor={noOcurrio(a.citas)} definicion={DEF.noOcurrieron} />
               <KpiPrincipal etiqueta="Citas nuevas registradas" valor={a.citas.registradas} definicion={DEF.registradas} />
-              <KpiPrincipal etiqueta="Mensajes de campaña enviados" valor={a.envios.enviados} definicion={DEF.enviados} />
-              <KpiPrincipal etiqueta="Conversaciones con el bot" valor={a.sesiones.total} definicion={DEF.conversaciones} />
             </div>
           )}
 
-          {conSala && (
+          <BloqueDetalle titulo="Ver más indicadores" resumen="Citas, campañas y conversaciones del período">
             <div className="kpis kpis-secundarios">
+              {conSala ? <>
+                <KpiPrincipal etiqueta="Cancelaciones y reprogramaciones" formato="pct" mejorSiSube={false} valor={noOcurrio(a.citas)} anterior={p ? noOcurrio(p.citas) : undefined} comparacion={comp} meta={meta('no_ocurrieron')} serie={serie('no_ocurrieron')} definicion={DEF.noOcurrieron} />
+                <KpiPrincipal etiqueta="Pacientes nuevos atendidos" valor={md ? md.nuevos.nuevos : null} meta={meta('nuevos')} sinMeta={sinMeta('nuevos')} serie={serie('nuevos')} parcial={parcial} definicion={DEF.nuevos} />
+                <KpiPrincipal etiqueta="Trámites resueltos por WhatsApp" valor={tramites(a)} anterior={p ? tramites(p) : undefined} comparacion={comp} meta={meta('tramites')} sinMeta={sinMeta('tramites')} serie={serie('tramites')} parcial={parcial} definicion={DEF.tramites} />
+              </> : <>
+                <KpiPrincipal etiqueta="Cancelaciones y reprogramaciones" formato="pct" mejorSiSube={false} valor={noOcurrio(a.citas)} definicion={DEF.noOcurrieron} />
+                <KpiPrincipal etiqueta="Mensajes de campaña enviados" valor={a.envios.enviados} definicion={DEF.enviados} />
+                <KpiPrincipal etiqueta="Conversaciones con el bot" valor={a.sesiones.total} definicion={DEF.conversaciones} />
+              </>}
+            </div>
+            {conSala && <div className="kpis kpis-secundarios">
               <Kpi etiqueta="Citas nuevas registradas" actual={a.citas.registradas} anterior={p?.citas.registradas} comparacion={comp} ayuda={DEF.registradas} />
               <Kpi etiqueta="Mensajes de campaña enviados" actual={a.envios.enviados} anterior={p?.envios.enviados} comparacion={comp} ayuda={DEF.enviados} />
               <Kpi etiqueta="Respondieron a los mensajes" formato="pct" actual={respuesta(a.envios)} anterior={p ? respuesta(p.envios) : undefined} comparacion={comp} ayuda={DEF.respuesta} />
               <Kpi etiqueta="Conversaciones con el bot" actual={a.sesiones.total} anterior={p?.sesiones.total} comparacion={comp} ayuda={DEF.conversaciones} />
               <Kpi etiqueta="Citas confirmadas por WhatsApp" formato="pct" actual={confWhatsapp} meta={meta('confirmadas_whatsapp') ?? undefined} ayuda={DEF.confirmadas} />
             </div>
-          )}
+            }
+          </BloqueDetalle>
         </>
       )}
 
@@ -193,6 +225,9 @@ export default function Resumen({ rango }: { rango: Rango }) {
         a && <Bloqueado clave="resumen.sala" titulo="Lo más relevante del período y lo que requiere atención" alto={200} />
       )}
 
+      {a && <AccionesRecomendadas a={a} />}
+
+      <BloqueDetalle titulo="Explorar el detalle del período" resumen="Actividad del bot, agenda, campañas, tendencias y lista de espera">
       {a && (
         <Tarjeta titulo="Lo que hizo el bot" marcas={marcasBot} ayuda="Trámites que los pacientes resolvieron por WhatsApp, sin pasar por recepción.">
           <div className="cifras">
@@ -245,6 +280,7 @@ export default function Resumen({ rango }: { rango: Rango }) {
           />
         </Tarjeta>
       )}
+      </BloqueDetalle>
     </>
   );
 }

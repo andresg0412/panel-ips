@@ -33,7 +33,7 @@ interface Pagina {
 }
 
 const PAGINAS: Pagina[] = [
-  { ruta: 'resumen', titulo: 'Resumen', desc: 'Lo más importante del período', Comp: Resumen, conRango: true, funcion: 'resumen.kpis' },
+  { ruta: 'resumen', titulo: 'Resumen', desc: 'Una lectura ejecutiva del estado de la IPS', Comp: Resumen, conRango: true, funcion: 'resumen.kpis' },
   { ruta: 'informe', titulo: 'Informe mensual', desc: 'Informe ejecutivo del mes para imprimir o guardar en PDF', Comp: InformeMensual, conRango: false, funcion: 'informe.mensual' },
   { ruta: 'semanal', titulo: 'Resumen semanal', desc: 'Lo más importante de la semana pasada, listo cada lunes', Comp: ResumenSemanal, conRango: false, funcion: 'informe.semanal' },
   { ruta: 'inteligencia', titulo: 'Inteligencia', desc: 'Predicción de inasistencia, pacientes que se alejan, días fuera de lo normal y simulador', Comp: Inteligencia, conRango: true, funcion: 'inteligencia.anomalias' },
@@ -72,6 +72,19 @@ function guardarAlmacen(clave: string, valor: string) {
   } catch {
     /* almacenamiento no disponible */
   }
+}
+
+function leerLista(clave: string): string[] {
+  try {
+    const valor = JSON.parse(localStorage.getItem(clave) ?? '[]');
+    return Array.isArray(valor) ? valor.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function guardarLista(clave: string, valor: string[]) {
+  try { localStorage.setItem(clave, JSON.stringify(valor)); } catch { /* almacenamiento no disponible */ }
 }
 
 /**
@@ -141,14 +154,22 @@ export default function App() {
 
 /** Grupos del menú (Etapa 2). Cada persona ve solo las pantallas de su rol; los grupos vacíos no se muestran. */
 const GRUPOS: { clave: string; titulo: string; paginas: string[] }[] = [
-  { clave: 'direccion', titulo: 'Dirección', paginas: ['resumen', 'semanal', 'informe', 'inteligencia'] },
-  { clave: 'operacion', titulo: 'Operación', paginas: ['mi-agenda', 'agenda', 'capacidad', 'profesionales', 'lista-espera', 'alertas'] },
-  { clave: 'relacion', titulo: 'Relación con pacientes', paginas: ['campanas', 'chatbot', 'pacientes', 'marketing'] },
-  { clave: 'cuenta', titulo: 'Su cuenta', paginas: ['plan', 'soporte'] },
+  { clave: 'direccion', titulo: 'Ver el estado de la IPS', paginas: ['resumen', 'alertas', 'informe', 'semanal', 'inteligencia'] },
+  { clave: 'operacion', titulo: 'Gestionar la operación', paginas: ['mi-agenda', 'agenda', 'capacidad', 'profesionales', 'lista-espera'] },
+  { clave: 'relacion', titulo: 'Pacientes y comunicación', paginas: ['pacientes', 'campanas', 'chatbot', 'marketing'] },
+  { clave: 'cuenta', titulo: 'Cuenta y sistema', paginas: ['plan', 'soporte'] },
 ];
 
 /** Vista por defecto según el rol: decide qué grupo va primero en el menú. */
 const VISTA_ROL: Record<string, string> = { direccion: 'direccion', analista: 'direccion', operacion: 'operacion', relacion: 'relacion', profesional: 'operacion', soporte: 'direccion' };
+const ORDEN_ROL: Record<string, string[]> = {
+  direccion: ['resumen', 'alertas', 'informe', 'inteligencia', 'campanas'],
+  analista: ['resumen', 'alertas', 'informe', 'inteligencia', 'campanas'],
+  operacion: ['mi-agenda', 'agenda', 'alertas', 'capacidad', 'lista-espera'],
+  profesional: ['mi-agenda', 'agenda', 'pacientes', 'alertas'],
+  relacion: ['pacientes', 'campanas', 'chatbot', 'lista-espera'],
+  soporte: ['alertas', 'soporte', 'resumen'],
+};
 
 function haceCuanto(ms: number): string {
   const min = Math.floor((Date.now() - ms) / 60_000);
@@ -186,6 +207,7 @@ function Panel({ yo }: { yo: Yo }) {
   const [tema, setTema] = useState<Tema>(() => (leerAlmacen('panel.tema') as Tema) || 'auto');
   const [refresco, setRefresco] = useState(0);
   const [menuAbierto, setMenuAbierto] = useState(false);
+  const [recientes, setRecientes] = useState<string[]>(() => leerLista('panel.recientes'));
   const [vista, setVista] = useState<string>(() => leerAlmacen('panel.vista') ?? VISTA_ROL[yo.rol ?? ''] ?? 'direccion');
   const incidentes = useApi<{ incidentes: Incidente[] }>('/api/incidentes');
   const verAlertas = yo.funciones['alertas.conteo']?.ok;
@@ -199,7 +221,8 @@ function Panel({ yo }: { yo: Yo }) {
   const ruta = estado.ruta && estadoPagina(estado.ruta) !== 'oculta' ? estado.ruta : rutaInicio;
 
   // Grupos con al menos una pantalla visible; el de la vista elegida va primero ("Su cuenta" siempre al final).
-  const grupos = GRUPOS.map((g) => ({ ...g, paginas: g.paginas.map((r) => visibles.find((p) => p.ruta === r)).filter((p): p is Pagina => !!p) }))
+  const ordenRol = ORDEN_ROL[yo.rol ?? ''] ?? [];
+  const grupos = GRUPOS.map((g) => ({ ...g, paginas: g.paginas.map((r) => visibles.find((p) => p.ruta === r)).filter((p): p is Pagina => !!p).sort((a, b) => (ordenRol.indexOf(a.ruta) < 0 ? 999 : ordenRol.indexOf(a.ruta)) - (ordenRol.indexOf(b.ruta) < 0 ? 999 : ordenRol.indexOf(b.ruta))) }))
     .filter((g) => g.paginas.length)
     .sort((a, b) => (a.clave === 'cuenta' ? 1 : b.clave === 'cuenta' ? -1 : (a.clave === vista ? -1 : 0) - (b.clave === vista ? -1 : 0)));
   const gruposDeTrabajo = grupos.filter((g) => g.clave !== 'cuenta');
@@ -214,14 +237,32 @@ function Panel({ yo }: { yo: Yo }) {
   useEffect(() => registrar('visita', ruta), [ruta]);
 
   useEffect(() => {
+    setRecientes((actuales) => {
+      const siguiente = [ruta, ...actuales.filter((r) => r !== ruta)].slice(0, 5);
+      guardarLista('panel.recientes', siguiente);
+      return siguiente;
+    });
+  }, [ruta]);
+
+  useEffect(() => {
     aplicarTema(tema);
     guardarAlmacen('panel.tema', tema);
   }, [tema]);
 
   // Al imprimir (botón o Ctrl+P) los gráficos se pintan en modo claro y se restaura el tema después.
   useEffect(() => {
-    const antes = () => aplicarTema('light');
-    const despues = () => aplicarTema(tema);
+    // Los bloques plegados se abren para imprimir y se vuelven a cerrar después (respaldo de ::details-content).
+    let abiertos: HTMLDetailsElement[] = [];
+    const antes = () => {
+      aplicarTema('light');
+      abiertos = [...document.querySelectorAll<HTMLDetailsElement>('details.bloque-detalle:not([open])')];
+      abiertos.forEach((d) => (d.open = true));
+    };
+    const despues = () => {
+      aplicarTema(tema);
+      abiertos.forEach((d) => (d.open = false));
+      abiertos = [];
+    };
     window.addEventListener('beforeprint', antes);
     window.addEventListener('afterprint', despues);
     return () => {
@@ -252,6 +293,8 @@ function Panel({ yo }: { yo: Yo }) {
   const bloqueada = estadoPagina(ruta) === 'bloqueada';
   const { Comp } = pagina;
   const rango = recortarRango(estado.rango, yo.historialDesde);
+  // Atajos a Resumen y Alertas desde las demás pantallas, solo si el rol puede abrirlas.
+  const contexto = ['resumen', 'alertas'].filter((r) => r !== ruta && estadoPagina(r) === 'ok').map((r) => PAGINAS.find((p) => p.ruta === r)!);
   const sufijo = estado.preset === 'custom' ? `?desde=${estado.rango.desde}&hasta=${estado.rango.hasta}` : `?p=${estado.preset}`;
 
   return (
@@ -276,6 +319,15 @@ function Panel({ yo }: { yo: Yo }) {
                 {gruposDeTrabajo.map((g) => <option key={g.clave} value={g.clave}>{g.titulo}</option>)}
               </select>
             </label>
+          )}
+          {recientes.filter((r) => r !== ruta && visibles.some((p) => p.ruta === r)).length > 0 && (
+            <div className="nav-recientes">
+              <div className="nav-grupo-titulo">Vistos recientemente</div>
+              {recientes.filter((r) => r !== ruta && visibles.some((p) => p.ruta === r)).slice(0, 3).map((r) => {
+                const p = visibles.find((x) => x.ruta === r)!;
+                return <a key={r} href={`#/${p.ruta}${sufijo}`}><Icono nombre={p.ruta} /><span className="nav-texto">{p.titulo}</span></a>;
+              })}
+            </div>
           )}
           <div className="nav-grupos">
             {grupos.map((g) => (
@@ -335,6 +387,8 @@ function Panel({ yo }: { yo: Yo }) {
             <div>
               <h2>{pagina.titulo}</h2>
               <p>{pagina.desc}</p>
+              {pagina.conRango && !bloqueada && <span className="periodo-seleccionado">Período: {fecha(rango.desde)} – {fecha(rango.hasta)}</span>}
+              {contexto.length > 0 && <nav className="contexto-navegacion" aria-label="Navegación contextual">{contexto.map((p) => <a key={p.ruta} href={`#/${p.ruta}${sufijo}`}>Ver {p.titulo.toLowerCase()}</a>)}</nav>}
             </div>
             {pagina.conRango && !bloqueada && <SelectorRango rango={rango} preset={estado.preset} onCambio={cambiarRango} minimo={yo.historialDesde} />}
           </div>

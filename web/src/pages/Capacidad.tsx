@@ -456,13 +456,21 @@ export default function Capacidad({ rango }: { rango: Rango }) {
       <Pestanas<Vista>
         bloqueadas={bloqueadas}
         opciones={[
-          ['ocupacion', 'Ocupación'],
-          ['espera', 'Próximas semanas y espera'],
-          ['inasistencia', 'Inasistencia'],
-          ['cancelaciones', 'Cancelaciones'],
-          ['modalidad', 'Presencial y virtual'],
-          ['recuperables', 'Citas recuperables'],
+          ['ocupacion', '¿Cuánto usamos la agenda?'],
+          ['espera', '¿Qué viene y cuánto esperamos?'],
+          ['inasistencia', '¿Dónde están faltando?'],
+          ['cancelaciones', '¿Qué se está cancelando?'],
+          ['modalidad', '¿Cómo se usan las modalidades?'],
+          ['recuperables', '¿Qué podemos recuperar?'],
         ]}
+        descripciones={{
+          ocupacion: 'Muestra qué porcentaje de los cupos disponibles fue utilizado.',
+          espera: 'Ayuda a anticipar la demanda y la espera de los pacientes.',
+          inasistencia: 'Identifique los días y horarios donde más pacientes dejan de asistir.',
+          cancelaciones: 'Analice cancelaciones y reprogramaciones para recuperar capacidad.',
+          modalidad: 'Compare el uso y el comportamiento de la atención presencial y virtual.',
+          recuperables: 'Encuentre citas y cupos que todavía pueden convertirse en atención.',
+        }}
         valor={vista}
         onCambio={setVista}
       />

@@ -101,10 +101,15 @@ export default function Chatbot({ rango }: { rango: Rango }) {
       <Pestanas<VistaChatbot>
         bloqueadas={bloqueadas}
         opciones={[
-          ['valor', 'Lo que aporta el bot'],
-          ['conversaciones', 'Conversaciones'],
-          ['recorrido', 'Paso a paso'],
+          ['valor', '¿Qué resolvió el bot?'],
+          ['conversaciones', '¿Qué hicieron los pacientes?'],
+          ['recorrido', '¿Dónde se quedan?'],
         ]}
+        descripciones={{
+          valor: 'Resumen del ahorro, las oportunidades y el valor generado por la atención automática.',
+          conversaciones: 'Observe cuándo conversan los pacientes y qué resultados obtienen.',
+          recorrido: 'Siga cada paso del trámite para localizar abandonos y oportunidades de mejora.',
+        }}
         valor={vista}
         onCambio={setVista}
       />

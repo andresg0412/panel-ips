@@ -15,12 +15,19 @@ export default function Soporte(_: { rango: Rango }) {
     <>
       <Pestanas<Vista>
         opciones={[
-          ['alertas', 'Alertas técnicas'],
-          ['licencia', 'Licencia y vista previa'],
-          ['usuarios', 'Usuarios y roles'],
-          ['actividad', 'Actividad'],
-          ['incidentes', 'Incidentes de datos'],
+          ['alertas', '¿Qué necesita soporte?'],
+          ['licencia', '¿Cómo está el acceso?'],
+          ['usuarios', '¿Quién puede hacer qué?'],
+          ['actividad', '¿Qué ha ocurrido?'],
+          ['incidentes', '¿Qué afectó los datos?'],
         ]}
+        descripciones={{
+          alertas: 'Revise problemas técnicos activos y las acciones disponibles para resolverlos.',
+          licencia: 'Consulte el plan, las funciones habilitadas y las vistas previas disponibles.',
+          usuarios: 'Conozca los usuarios, roles y permisos que controlan el acceso al panel.',
+          actividad: 'Consulte los cambios y acciones registrados en el sistema.',
+          incidentes: 'Identifique períodos con datos incompletos y su impacto en los informes.',
+        }}
         valor={vista}
         onCambio={setVista}
       />

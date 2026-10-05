@@ -286,11 +286,17 @@ export default function Campanas({ rango }: { rango: Rango }) {
       <Pestanas<VistaCampanas>
         bloqueadas={bloqueadas}
         opciones={[
-          ['resultados', 'Resultados'],
-          ['efecto', 'Efecto en las citas'],
-          ['desempeno', 'Desempeño'],
-          ['ejecuciones', 'Ejecuciones'],
+          ['resultados', '¿Qué lograron las campañas?'],
+          ['efecto', '¿Movieron las citas?'],
+          ['desempeno', '¿Cuál funciona mejor?'],
+          ['ejecuciones', '¿Se ejecutaron correctamente?'],
         ]}
+        descripciones={{
+          resultados: 'Vea cuántos mensajes se enviaron, respondieron y confirmaron por campaña.',
+          efecto: 'Compare el comportamiento de las citas después de recibir una campaña.',
+          desempeno: 'Encuentre las campañas con mejor respuesta, oportunidad y continuidad.',
+          ejecuciones: 'Compruebe qué campañas corrieron cada día y qué volumen procesaron.',
+        }}
         valor={vista}
         onCambio={setVista}
       />

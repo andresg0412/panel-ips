@@ -62,9 +62,9 @@ export default function Pacientes({ rango }: { rango: Rango }) {
   const { puede, visible } = useAcceso();
   type V = 'panorama' | 'retencion' | 'buscar';
   const FUNCION: Record<V, [string, string]> = {
-    panorama: ['pacientes.panorama', 'Panorama'],
-    retencion: ['pacientes.retencion', 'Retención y actividad'],
-    buscar: ['pacientes.buscar', 'Buscar un paciente'],
+    panorama: ['pacientes.panorama', '¿Cómo es nuestra población?'],
+    retencion: ['pacientes.retencion', '¿Quiénes necesitan volver?'],
+    buscar: ['pacientes.buscar', '¿Cómo encuentro un paciente?'],
   };
   // Pestañas que el rol no incluye no se muestran; las que el plan no incluye, con candado.
   const opciones = (Object.keys(FUNCION) as V[]).filter((v) => visible(FUNCION[v][0]));
@@ -72,7 +72,17 @@ export default function Pacientes({ rango }: { rango: Rango }) {
   const bloqueadas = opciones.filter((v) => !puede(FUNCION[v][0]));
   return (
     <>
-      <Pestanas<V> opciones={opciones.map((v) => [v, FUNCION[v][1]])} valor={vista} onCambio={setVista} bloqueadas={bloqueadas} />
+      <Pestanas<V>
+        opciones={opciones.map((v) => [v, FUNCION[v][1]])}
+        descripciones={{
+          panorama: 'Entienda quiénes son sus pacientes, cuántos llegan y cada cuánto regresan.',
+          retencion: 'Identifique pacientes que podrían necesitar una invitación para volver.',
+          buscar: 'Busque un paciente y consulte su información según sus permisos.',
+        }}
+        valor={vista}
+        onCambio={setVista}
+        bloqueadas={bloqueadas}
+      />
       {bloqueadas.includes(vista) && <Bloqueado clave={FUNCION[vista][0]} titulo={FUNCION[vista][1]} alto={280} />}
       {!bloqueadas.includes(vista) && vista === 'panorama' && <PacientesPanorama rango={rango} />}
       {!bloqueadas.includes(vista) && vista === 'retencion' && <PacientesRetencion />}
