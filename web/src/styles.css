@@ -416,13 +416,13 @@ button.enlace:disabled { opacity: 0.5; cursor: default; }
 
 /* Etapa 3: tipo de métrica junto al título de la tarjeta (no es un aviso). */
 .card h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
-.marca { position: relative; display: inline-flex; align-items: center; font-size: 10.5px; font-weight: 600; letter-spacing: 0.01em; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--ink-2); background: var(--surface-2); cursor: help; white-space: nowrap; }
-.marca-estimada { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
-.marca-incompleta { color: color-mix(in srgb, var(--warning) 70%, var(--ink)); background: color-mix(in srgb, var(--warning) 14%, transparent); border-color: transparent; }
-.marca-incidente { color: var(--ink-2); background: var(--incidente); border-style: dashed; }
-.marca::after { content: attr(data-tip); position: absolute; left: 0; top: calc(100% + 6px); width: max-content; max-width: 280px; padding: 8px 10px; border-radius: 8px; background: var(--ink); color: var(--page); font-size: 12px; font-weight: 400; line-height: 1.4; white-space: normal; opacity: 0; pointer-events: none; transition: opacity 0.15s; z-index: 40; }
-.marca:hover::after, .marca:focus::after { opacity: 1; }
-.marca:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.distintivo { position: relative; display: inline-flex; align-items: center; font-size: 10.5px; font-weight: 600; letter-spacing: 0.01em; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--ink-2); background: var(--surface-2); cursor: help; white-space: nowrap; }
+.distintivo-estimada { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
+.distintivo-incompleta { color: color-mix(in srgb, var(--warning) 70%, var(--ink)); background: color-mix(in srgb, var(--warning) 14%, transparent); border-color: transparent; }
+.distintivo-incidente { color: var(--ink-2); background: var(--incidente); border-style: dashed; }
+.distintivo::after { content: attr(data-tip); position: absolute; left: 0; top: calc(100% + 6px); width: max-content; max-width: 280px; padding: 8px 10px; border-radius: 8px; background: var(--ink); color: var(--page); font-size: 12px; font-weight: 400; line-height: 1.4; white-space: normal; opacity: 0; pointer-events: none; transition: opacity 0.15s; z-index: 40; }
+.distintivo:hover::after, .distintivo:focus::after { opacity: 1; }
+.distintivo:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* Embudo por etapas (campañas y chatbot). */
 .embudo { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }

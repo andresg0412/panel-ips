@@ -35,7 +35,7 @@ export function Marca({ tipo, detalle }: MarcaDato) {
   const m = MARCAS[tipo];
   const tip = detalle ?? m.explicacion;
   return (
-    <span className={`marca marca-${tipo}`} tabIndex={0} role="note" aria-label={`${m.texto}: ${tip}`} data-tip={tip}>
+    <span className={`distintivo distintivo-${tipo}`} tabIndex={0} role="note" aria-label={`${m.texto}: ${tip}`} data-tip={tip}>
       {m.texto}
     </span>
   );
