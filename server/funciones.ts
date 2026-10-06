@@ -15,18 +15,18 @@ export const MAX_USUARIOS: Record<Nivel, number | null> = { basico: 1, intermedi
 
 export type Pagina =
   | 'resumen' | 'campanas' | 'agenda' | 'capacidad' | 'profesionales' | 'chatbot' | 'lista-espera' | 'pacientes' | 'marketing'
-  | 'alertas' | 'plan' | 'mi-agenda' | 'informe' | 'semanal' | 'inteligencia' | 'soporte';
+  | 'alertas' | 'plan' | 'mi-agenda' | 'informe' | 'semanal' | 'inteligencia' | 'envios' | 'soporte';
 
 export type Rol = 'direccion' | 'operacion' | 'analista' | 'relacion' | 'profesional' | 'soporte';
 export const esRol = (v: unknown): v is Rol => typeof v === 'string' && v in ROLES;
 
-const CLIENTE: Pagina[] = ['resumen', 'informe', 'semanal', 'inteligencia', 'campanas', 'agenda', 'capacidad', 'profesionales', 'chatbot', 'lista-espera', 'pacientes', 'marketing', 'alertas', 'plan'];
+const CLIENTE: Pagina[] = ['resumen', 'informe', 'semanal', 'inteligencia', 'campanas', 'envios', 'agenda', 'capacidad', 'profesionales', 'chatbot', 'lista-espera', 'pacientes', 'marketing', 'alertas', 'plan'];
 
 export const ROLES: Record<Rol, { nombre: string; inicio: Pagina; paginas: Pagina[] }> = {
   direccion: { nombre: 'Dirección', inicio: 'resumen', paginas: CLIENTE },
   analista: { nombre: 'Analista', inicio: 'resumen', paginas: CLIENTE },
-  operacion: { nombre: 'Operación', inicio: 'agenda', paginas: ['agenda', 'capacidad', 'inteligencia', 'profesionales', 'lista-espera', 'alertas'] },
-  relacion: { nombre: 'Relación con pacientes', inicio: 'campanas', paginas: ['campanas', 'chatbot', 'pacientes', 'marketing', 'inteligencia', 'alertas'] },
+  operacion: { nombre: 'Operación', inicio: 'agenda', paginas: ['agenda', 'capacidad', 'inteligencia', 'profesionales', 'lista-espera', 'envios', 'alertas'] },
+  relacion: { nombre: 'Relación con pacientes', inicio: 'campanas', paginas: ['campanas', 'envios', 'chatbot', 'pacientes', 'marketing', 'inteligencia', 'alertas'] },
   // "Mi agenda": solo los datos del profesional vinculado al usuario (Etapa 4), más los agregados generales.
   profesional: { nombre: 'Profesional', inicio: 'mi-agenda', paginas: ['mi-agenda', 'resumen'] },
   soporte: { nombre: 'Soporte', inicio: 'soporte', paginas: [...CLIENTE, 'mi-agenda', 'soporte'] },
@@ -129,6 +129,17 @@ export const FUNCIONES: Funcion[] = [
   { clave: 'listaEspera.detalle', pagina: 'lista-espera', nivel: 'intermedio', titulo: 'Cupos recuperados, ofertas y motivos' },
   { clave: 'listaEspera.invitaciones', pagina: 'lista-espera', nivel: 'full', titulo: 'Campañas de invitación a la lista de espera' },
 
+  // Envíos manuales (campañas que se lanzan desde el panel). Es una función de operación, no de reportes: está en
+  // todos los niveles. Enviar mensajes a pacientes queda solo para la dirección (y soporte).
+  { clave: 'envios.ver', pagina: 'envios', nivel: 'basico', titulo: 'Envíos manuales: previsualizar a quién se invitará y ver el avance' },
+  {
+    clave: 'envios.ejecutar',
+    pagina: 'envios',
+    nivel: 'basico',
+    titulo: 'Lanzar el envío de invitaciones a la lista de espera',
+    roles: ['direccion'],
+  },
+
   { clave: 'marketing.alcance', pagina: 'marketing', nivel: 'intermedio', titulo: 'Alcance de WhatsApp por mes' },
   { clave: 'marketing.segmentos', pagina: 'marketing', nivel: 'full', titulo: 'Segmentos de pacientes para invitar a volver' },
 
@@ -221,6 +232,9 @@ export const ENDPOINTS: Record<string, string> = {
   'GET /api/pacientes/:id': 'pacientes.buscar',
 
   'GET /api/lista-espera': 'listaEspera.inscritos',
+  'GET /api/envios/invitacion/previsualizar': 'envios.ver',
+  'GET /api/envios/invitacion/historial': 'envios.ver',
+  'POST /api/envios/invitacion/ejecutar': 'envios.ejecutar',
   'GET /api/marketing': 'marketing.alcance',
 
   'GET /api/alertas/conteo': 'alertas.conteo',

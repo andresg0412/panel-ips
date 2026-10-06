@@ -135,6 +135,24 @@ const MIGRACIONES: { nombre: string; sql: string }[] = [
     nombre: '004_usuario_profesional',
     sql: `ALTER TABLE panel.usuarios ADD COLUMN profesional text;`,
   },
+  {
+    // Envíos manuales: quién lanzó cada campaña desde el panel, con qué parámetros y qué respondió el bot.
+    nombre: '005_envios_manuales',
+    sql: `
+      CREATE TABLE panel.envios_manuales (
+        id bigserial PRIMARY KEY,
+        at timestamptz NOT NULL DEFAULT now(),
+        usuario text,
+        rol text,
+        campana text NOT NULL,
+        parametros jsonb NOT NULL DEFAULT '{}'::jsonb,
+        elegibles_previstos integer,
+        status integer,
+        respuesta jsonb
+      );
+      CREATE INDEX ix_envios_manuales_at ON panel.envios_manuales (campana, at DESC);
+    `,
+  },
 ];
 
 /** Configuración inicial (solo si no existe): nivel Full y los usuarios que ya tiene nginx, con su rol. */

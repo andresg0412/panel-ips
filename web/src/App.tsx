@@ -16,6 +16,7 @@ import { InformeMensual, ResumenSemanal } from './pages/Informe';
 import Inteligencia from './pages/Inteligencia';
 import MiPlan from './pages/MiPlan';
 import Soporte from './pages/Soporte';
+import Envios from './pages/Envios';
 import { IncidentesCtx, type Incidente } from './incidentes';
 import { AccesoCtx, Bloqueado, Candado, type Yo } from './acceso';
 import { fecha } from './format';
@@ -38,6 +39,7 @@ const PAGINAS: Pagina[] = [
   { ruta: 'semanal', titulo: 'Resumen semanal', desc: 'Lo más importante de la semana pasada, listo cada lunes', Comp: ResumenSemanal, conRango: false, funcion: 'informe.semanal' },
   { ruta: 'inteligencia', titulo: 'Inteligencia', desc: 'Predicción de inasistencia, pacientes que se alejan, días fuera de lo normal y simulador', Comp: Inteligencia, conRango: true, funcion: 'inteligencia.anomalias' },
   { ruta: 'campanas', titulo: 'Campañas', desc: 'Mensajes automáticos de WhatsApp y sus resultados', Comp: Campanas, conRango: true, funcion: 'campanas.resultados' },
+  { ruta: 'envios', titulo: 'Envíos manuales', desc: 'Consultar a quiénes se invitará y lanzar la invitación a la lista de espera', Comp: Envios, conRango: false, funcion: 'envios.ver' },
   { ruta: 'agenda', titulo: 'Agenda', desc: 'Citas por estado, profesional y especialidad', Comp: Agenda, conRango: true, funcion: 'agenda.periodo' },
   { ruta: 'capacidad', titulo: 'Capacidad', desc: 'Dónde sobra y dónde falta agenda, cuánto se espera y qué se puede recuperar', Comp: Capacidad, conRango: true, funcion: 'capacidad.centro' },
   { ruta: 'mi-agenda', titulo: 'Mi agenda', desc: 'Sus próximas citas, sus pacientes y su horario', Comp: MiAgenda, conRango: true, funcion: 'miagenda.ver' },
@@ -156,7 +158,7 @@ export default function App() {
 const GRUPOS: { clave: string; titulo: string; paginas: string[] }[] = [
   { clave: 'direccion', titulo: 'Ver el estado de la IPS', paginas: ['resumen', 'alertas', 'informe', 'semanal', 'inteligencia'] },
   { clave: 'operacion', titulo: 'Gestionar la operación', paginas: ['mi-agenda', 'agenda', 'capacidad', 'profesionales', 'lista-espera'] },
-  { clave: 'relacion', titulo: 'Pacientes y comunicación', paginas: ['pacientes', 'campanas', 'chatbot', 'marketing'] },
+  { clave: 'relacion', titulo: 'Pacientes y comunicación', paginas: ['pacientes', 'campanas', 'envios', 'chatbot', 'marketing'] },
   { clave: 'cuenta', titulo: 'Cuenta y sistema', paginas: ['plan', 'soporte'] },
 ];
 

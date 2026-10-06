@@ -28,6 +28,7 @@ const enmascararFilas = (req: FastifyRequest, filas: Datos[]) =>
 const RECORTES: Record<string, Recorte> = {
   'GET /api/campanas/envios': (req, d) => ({ ...d, filas: enmascararFilas(req, d.filas) }),
   'GET /api/pacientes/buscar': (req, d) => ({ ...d, filas: enmascararFilas(req, d.filas) }),
+  'GET /api/envios/invitacion/previsualizar': (req, d) => ({ ...d, filas: enmascararFilas(req, d.filas) }),
   'GET /api/pacientes/:id': (req, d) => (d.paciente ? { ...d, paciente: enmascararFilas(req, [d.paciente])[0] } : d),
 
   'GET /api/resumen': (req, d) =>

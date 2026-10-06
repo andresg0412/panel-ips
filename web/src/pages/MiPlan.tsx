@@ -23,6 +23,7 @@ const SECCIONES: [string | null, string][] = [
   ['capacidad', 'Capacidad'],
   ['profesionales', 'Profesionales'],
   ['campanas', 'Campañas'],
+  ['envios', 'Envíos manuales'],
   ['chatbot', 'Chatbot'],
   ['pacientes', 'Pacientes'],
   ['lista-espera', 'Lista de espera'],
