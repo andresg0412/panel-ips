@@ -153,6 +153,21 @@ const MIGRACIONES: { nombre: string; sql: string }[] = [
       CREATE INDEX ix_envios_manuales_at ON panel.envios_manuales (campana, at DESC);
     `,
   },
+  {
+    // Personal interno y números de prueba: el panel no muestra ningún dato suyo (ver ocultos.ts).
+    nombre: '006_identidades_ocultas',
+    sql: `
+      CREATE TABLE panel.identidades_ocultas (
+        id bigserial PRIMARY KEY,
+        tipo text NOT NULL CHECK (tipo IN ('telefono', 'documento')),
+        valor text NOT NULL CHECK (valor ~ '^[A-Za-z0-9]{1,30}$'),
+        nota text,
+        creado_por text,
+        at timestamptz NOT NULL DEFAULT now(),
+        UNIQUE (tipo, valor)
+      );
+    `,
+  },
 ];
 
 /** Configuración inicial (solo si no existe): nivel Full y los usuarios que ya tiene nginx, con su rol. */

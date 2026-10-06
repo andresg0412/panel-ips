@@ -9,6 +9,7 @@ import { incidentes, recargarIncidentes } from './incidentes.js';
 import { prepararEsquema } from './esquema.js';
 import { instalarAcceso, registrarError } from './acceso.js';
 import { instalarRecortes } from './recortes.js';
+import { recargarOcultos } from './ocultos.js';
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, trustProxy: true });
 
@@ -40,6 +41,15 @@ try {
 } catch (e) {
   app.log.error(e, 'no se pudo preparar el esquema panel; se usan los incidentes base');
 }
+
+// Identidades ocultas (ocultos.ts): antes de atender, y luego cada 10 minutos. Si fallara, el panel arranca sin
+// ocultar nada y lo registra; no se bloquea el arranque.
+try {
+  await recargarOcultos((m) => app.log.info(m));
+} catch (e) {
+  app.log.error(e, 'no se pudieron cargar las identidades ocultas');
+}
+setInterval(() => void recargarOcultos().catch((e) => app.log.error(e, 'no se pudieron recargar las identidades ocultas')), 10 * 60_000).unref();
 
 instalarAcceso(app);
 instalarRecortes(app);

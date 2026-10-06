@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { reescribirConsulta } from './ocultos.js';
 
 // Los DATE de Postgres llegan como texto 'YYYY-MM-DD' (sin conversión a Date con zona horaria)
 // y los BIGINT de COUNT/SUM como número: los valores del panel nunca se acercan a 2^53.
@@ -51,7 +52,8 @@ export async function queryApp<T = Record<string, unknown>>(sql: string, params:
 }
 
 export async function query<T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> {
-  const res = await pool.query(sql, params);
+  // Ninguna pantalla muestra datos de las identidades ocultas (personal interno, números de prueba): ocultos.ts.
+  const res = await pool.query(reescribirConsulta(sql), params);
   return res.rows as T[];
 }
 

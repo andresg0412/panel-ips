@@ -117,7 +117,8 @@ export default async function rutasEnvios(app: FastifyInstance) {
       : [];
     const porId = new Map(datos.map((d) => [d.agenda_id, d]));
     // Mismo orden que el bot: los primeros N de esta lista son los que se envían con "Enviar a N".
-    const filas = ids.map((id, i) => ({ orden: i + 1, ...(porId.get(id) ?? { agenda_id: id }) }));
+    // Una cita sin datos aquí es de una identidad oculta (ocultos.ts): no se muestra.
+    const filas = ids.filter((id) => porId.has(id)).map((id, i) => ({ orden: i + 1, ...porId.get(id)! }));
     const { agenda_ids_elegibles: _ids, ...resumen } = p;
     return {
       resumen: { ...resumen, max_por_ejecucion: Math.min(p.max_por_ejecucion ?? LIMITE_MAXIMO, LIMITE_MAXIMO) },
