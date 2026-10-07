@@ -24,6 +24,7 @@ export const ENLACE_ALERTA: Record<string, string> = {
   scraper_sin_actualizar: '#/alertas',
   bot_sin_conversaciones: '#/chatbot',
   errores_bot: '#/alertas',
+  lista_espera_cascada: '#/lista-espera',
 };
 
 export const claveAlerta = (a: Alerta) => `${a.alerta}${a.instancia ? `:${a.instancia}` : ''}`;
@@ -77,7 +78,7 @@ const FALLO_DIARIO = `
  * A6 más de 10 eventos de error del bot en el día.
  */
 export async function alertasActivas(): Promise<Alerta[]> {
-  const [ahora, ejecHoy, fallos, agenda, sesiones, errores] = await Promise.all([
+  const [ahora, ejecHoy, fallos, agenda, sesiones, errores, eventosCascada] = await Promise.all([
     queryOne<{ hoy: string; hora: string; dow: number; festivo: boolean }>(
       `SELECT ${HOY}::text AS hoy, to_char(now() AT TIME ZONE 'America/Bogota', 'HH24:MI') AS hora,
               extract(isodow FROM now() AT TIME ZONE 'America/Bogota')::int AS dow,
@@ -110,6 +111,20 @@ export async function alertasActivas(): Promise<Alerta[]> {
     queryOne<{ n: number }>(
       `SELECT count(*) AS n FROM bi.fact_eventos WHERE fecha_bogota = ${HOY} AND NOT es_backfill AND tipo_evento ILIKE '%error%'`,
     ),
+    query<{
+      tipo_evento: string; lista_espera_id: string; cupo_liberado_id: string | null;
+      nombre_paciente: string | null; profesional: string | null; fecha_cita: string | null; hora_cita: string | null;
+    }>(
+      `SELECT tipo_evento, lista_espera_id, cupo_liberado_id, nombre_paciente, profesional, fecha_cita, hora_cita
+         FROM bi.v_alertas_cascada
+        ORDER BY ocurrido_at DESC
+        LIMIT 50`,
+    ).catch((error) => {
+      // La vista bi.v_alertas_cascada llega con la migración 036 del backend; sin ella no hay alertas de cascada
+      // pero el resto de las alertas debe seguir funcionando.
+      console.error('Alertas de cascada no disponibles:', error?.message ?? error);
+      return [];
+    }),
   ]);
 
   const alertas: Alerta[] = [];
@@ -172,6 +187,19 @@ export async function alertasActivas(): Promise<Alerta[]> {
       severidad: 'media',
       titulo: `${errores.n} errores del bot hoy`,
       detalle: 'Más de 10 eventos de error en el día. Revise el detalle en "Errores del bot".',
+    });
+  }
+  for (const e of eventosCascada) {
+    const tardia = e.tipo_evento === 'aceptacion_tardia';
+    const horario = [e.fecha_cita, e.hora_cita].filter(Boolean).join(' ');
+    alertas.push({
+      alerta: 'lista_espera_cascada',
+      instancia: `${e.tipo_evento}:${e.lista_espera_id}:${e.cupo_liberado_id ?? 'sin-cupo'}`,
+      severidad: tardia ? 'alta' : 'media',
+      titulo: tardia ? `Paciente interesado en un cupo escalado: ${e.nombre_paciente}` : `Número no entregable en lista de espera: ${e.nombre_paciente}`,
+      detalle: tardia
+        ? `Revisar si el espacio ${horario ? `del ${horario} ` : ''}${e.profesional ? `con ${e.profesional} ` : ''}sigue disponible y contactar al paciente.`
+        : 'Meta no pudo entregar la oferta. Corregir el teléfono del paciente y reactivar su inscripción cuando corresponda.',
     });
   }
   return alertas.sort((a, b) => (a.severidad === b.severidad ? 0 : a.severidad === 'alta' ? -1 : 1));
