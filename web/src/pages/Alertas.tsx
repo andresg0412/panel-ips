@@ -2,9 +2,9 @@ import { useCallback, useState } from 'react';
 import { conRango, enviarJson, useApi, type Rango } from '../api';
 import Grafico from '../components/Grafico';
 import { pequenosMultiplos } from '../components/series';
-import { Estado, Tarjeta } from '../components/ui';
+import { Estado, Tarjeta, Tabla, type Columna } from '../components/ui';
 import { rangoAnterior, useSombras, type Incidente } from '../incidentes';
-import { fecha, fechaHora } from '../format';
+import { fecha, fechaHora, hora, etiqueta } from '../format';
 import { MedidorConfianza, type Confianza } from '../components/sala';
 import { Esqueleto } from '../components/ui';
 import Sistema from './Sistema';
@@ -37,6 +37,28 @@ const AREA: Record<string, string> = {
   eventos: 'Registro del bot',
   trazabilidad: 'Registro de envíos',
 };
+
+interface HorarioSinInteresados {
+  evento_id: string; fecha_cita: string; hora_cita: string; profesional: string;
+  especialidad: string | null; liberado_desde: string; origen: string;
+}
+const COLUMNAS_HORARIO: Columna<HorarioSinInteresados>[] = [
+  { clave: 'fecha_cita', titulo: 'Fecha', formato: fecha },
+  { clave: 'hora_cita', titulo: 'Hora', formato: hora },
+  { clave: 'profesional', titulo: 'Profesional' },
+  { clave: 'especialidad', titulo: 'Especialidad' },
+  { clave: 'liberado_desde', titulo: 'Liberado', formato: fechaHora },
+  { clave: 'origen', titulo: 'Canal', formato: etiqueta, csv: etiqueta },
+];
+
+function HorariosSinInteresados() {
+  const { data, error, cargando } = useApi<{ filas: HorarioSinInteresados[] }>('/api/alertas/cupos-sin-interesados', 60_000);
+  return <Tarjeta titulo="Horarios liberados sin interesados" ayuda="Recepción puede ofrecer estos horarios. Se muestran mientras sigan libres y aún no haya pasado su hora; las fechas y horas son de Bogotá.">
+    <Estado cargando={cargando} error={error} hayDatos={!!data} />
+    {data && <Tabla filas={data.filas} columnas={COLUMNAS_HORARIO} nombreCsv="horarios_sin_interesados"
+      vacio="No hay horarios liberados sin interesados por ahora." />}
+  </Tarjeta>;
+}
 
 function TarjetaAlerta({ a, onCambio }: { a: Alerta; onCambio: () => void }) {
   const e = ESTILO[a.severidad];
@@ -139,6 +161,7 @@ function AlertasPanel({ rango }: { rango: Rango }) {
         </Tarjeta>
       )}
       <Estado cargando={cargando} error={error} hayDatos={!!data} />
+      {puede('listaEspera.detalle') && <HorariosSinInteresados />}
       {data && (
         <>
           <Tarjeta

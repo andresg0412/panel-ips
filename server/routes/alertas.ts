@@ -235,6 +235,12 @@ export async function alertasActivas(): Promise<Alerta[]> {
 }
 
 export default async function rutasAlertas(app: FastifyInstance) {
+  // Lista informativa de recepción: no añade banners ni aumenta el contador global de alertas.
+  app.get('/api/alertas/cupos-sin-interesados', async (req) => conCache(claveCache(req), async () => ({
+    filas: await query(`SELECT evento_id, fecha_cita, hora_cita, profesional, especialidad, liberado_desde, origen
+      FROM bi.v_cupos_sin_interesados ORDER BY fecha_cita, hora_cita, profesional`),
+  }), 60_000));
+
   // Liviano: lo consulta la cabecera cada minuto. Cuenta solo las que nadie ha revisado.
   app.get('/api/alertas/conteo', async () => {
     const a = await alertasConEstado();
