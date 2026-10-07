@@ -78,7 +78,7 @@ const FALLO_DIARIO = `
  * A6 más de 10 eventos de error del bot en el día.
  */
 export async function alertasActivas(): Promise<Alerta[]> {
-  const [ahora, ejecHoy, fallos, agenda, sesiones, errores, eventosCascada] = await Promise.all([
+  const [ahora, ejecHoy, fallos, agenda, sesiones, errores, eventosCascada, cuposEscalados] = await Promise.all([
     queryOne<{ hoy: string; hora: string; dow: number; festivo: boolean }>(
       `SELECT ${HOY}::text AS hoy, to_char(now() AT TIME ZONE 'America/Bogota', 'HH24:MI') AS hora,
               extract(isodow FROM now() AT TIME ZONE 'America/Bogota')::int AS dow,
@@ -123,6 +123,19 @@ export async function alertasActivas(): Promise<Alerta[]> {
       // La vista bi.v_alertas_cascada llega con la migración 036 del backend; sin ella no hay alertas de cascada
       // pero el resto de las alertas debe seguir funcionando.
       console.error('Alertas de cascada no disponibles:', error?.message ?? error);
+      return [];
+    }),
+    query<{
+      cupo_liberado_id: string; fecha_cita: string; hora_cita: string; profesional: string;
+      motivo_cierre: string | null; escalado_desde: string; ofertas: number;
+    }>(
+      `SELECT cupo_liberado_id, fecha_cita, hora_cita, profesional, motivo_cierre, escalado_desde, ofertas
+         FROM bi.v_cupos_escalados
+        ORDER BY fecha_cita, hora_cita`,
+    ).catch((error) => {
+      // La vista bi.v_cupos_escalados llega con la migración 037 del backend; sin ella no hay esta alerta
+      // pero el resto debe seguir funcionando.
+      console.error('Alertas de cupos escalados no disponibles:', error?.message ?? error);
       return [];
     }),
   ]);
@@ -200,6 +213,22 @@ export async function alertasActivas(): Promise<Alerta[]> {
       detalle: tardia
         ? `Revisar si el espacio ${horario ? `del ${horario} ` : ''}${e.profesional ? `con ${e.profesional} ` : ''}sigue disponible y contactar al paciente.`
         : 'Meta no pudo entregar la oferta. Corregir el teléfono del paciente y reactivar su inscripción cuando corresponda.',
+    });
+  }
+  const motivosCierre: Record<string, string> = {
+    antelacion_critica: 'poca antelación',
+    fila_agotada: 'nadie respondió a las ofertas',
+    sin_candidatos: 'sin candidatos',
+    cascada_maxima: 'límite de cascada alcanzado',
+    fuera_de_horario_antelacion_critica: 'poca antelación fuera del horario de atención',
+  };
+  for (const c of cuposEscalados) {
+    alertas.push({
+      alerta: 'lista_espera_cascada',
+      instancia: `cupo_escalado:${c.cupo_liberado_id}`,
+      severidad: 'alta',
+      titulo: `Cupo pendiente de recepción: ${c.fecha_cita} ${c.hora_cita} · ${c.profesional}`,
+      detalle: `Motivo: ${motivosCierre[c.motivo_cierre ?? ''] ?? c.motivo_cierre ?? 'sin detalle'}. ${c.ofertas} ofertas enviadas. Escalado desde ${c.escalado_desde}.`,
     });
   }
   return alertas.sort((a, b) => (a.severidad === b.severidad ? 0 : a.severidad === 'alta' ? -1 : 1));
