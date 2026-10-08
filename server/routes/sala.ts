@@ -92,7 +92,7 @@ const lunes = (dia: string) => {
 async function semanas(hasta: string, baseP: Promise<Base>) {
   const SEM = `s AS (SELECT generate_series(date_trunc('week', $1::date) - interval '7 weeks', date_trunc('week', $1::date), interval '1 week')::date AS semana)`;
   const [citas, bot] = await Promise.all([
-    query<{ semana: string; asistio: number; no_asistio: number; total: number; no_ocurrieron: number }>(
+    query<{ semana: string; asistio: number; no_asistio: number; canceladas: number; total: number; no_ocurrieron: number }>(
       // Cada cita se etiqueta con su semana en una sola pasada y se une por igualdad (un JOIN por rango de fechas
       // recorrería `citas` una vez por semana).
       `WITH ${CITAS}, ${SEM},
@@ -101,6 +101,7 @@ async function semanas(hasta: string, baseP: Promise<Base>) {
        SELECT s.semana::text AS semana,
               count(c.semana) FILTER (WHERE c.grupo = 'Asistió') AS asistio,
               count(c.semana) FILTER (WHERE c.grupo = 'No asistió') AS no_asistio,
+              count(c.semana) FILTER (WHERE c.grupo = 'Cancelada') AS canceladas,
               count(c.semana) AS total,
               count(c.semana) FILTER (WHERE c.grupo IN ('Cancelada', 'Reprogramada')) AS no_ocurrieron
          FROM s LEFT JOIN c USING (semana)
@@ -136,6 +137,7 @@ async function semanas(hasta: string, baseP: Promise<Base>) {
     semana: c.semana,
     atendidas: c.asistio,
     asistencia: ratio(c.asistio, c.asistio + c.no_asistio),
+    cumplimiento: ratio(c.asistio, c.asistio + c.no_asistio + c.canceladas),
     no_ocurrieron: ratio(c.no_ocurrieron, c.total),
     nuevos: nuevos.get(c.semana) ?? 0,
     tramites: tram.get(c.semana) ?? 0,

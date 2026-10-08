@@ -51,6 +51,46 @@ const COLUMNAS_HORARIO: Columna<HorarioSinInteresados>[] = [
   { clave: 'origen', titulo: 'Canal', formato: etiqueta, csv: etiqueta },
 ];
 
+interface AvisoRecepcion {
+  notificacion_id: string; tipo: string; estado: string; profesional: string | null; fecha_cita: string | null;
+  hora_cita: string | null; motivo: string | null; intentos: number; ultimo_error: string | null;
+  motivo_descarte: string | null; programada_para: string; enviada_at: string | null; creada_at: string;
+}
+const TIPO_AVISO: Record<string, string> = {
+  cupo_sin_asignar: 'Cupo sin asignar',
+  cupo_sin_interesados: 'Horario sin interesados',
+  crisis: 'Alerta de crisis',
+};
+const ESTADO_AVISO: Record<string, string> = {
+  enviada: 'Enviado',
+  pendiente: 'Pendiente de envío',
+  descartada: 'Descartado (ya no hacía falta)',
+  error: 'Falló el envío',
+};
+const COLUMNAS_AVISO: Columna<AvisoRecepcion>[] = [
+  { clave: 'creada_at', titulo: 'Creado', formato: fechaHora },
+  { clave: 'tipo', titulo: 'Aviso', formato: (v) => TIPO_AVISO[String(v)] ?? etiqueta(v), csv: (v) => TIPO_AVISO[String(v)] ?? etiqueta(v) },
+  { clave: 'fecha_cita', titulo: 'Horario', formato: (v, f) => (v ? `${fecha(v)} ${hora(f.hora_cita)}` : '—'), csv: (v, f) => (v ? `${v} ${f.hora_cita ?? ''}` : '') },
+  { clave: 'profesional', titulo: 'Profesional' },
+  { clave: 'estado', titulo: 'Estado', formato: (v) => ESTADO_AVISO[String(v)] ?? etiqueta(v), csv: (v) => ESTADO_AVISO[String(v)] ?? etiqueta(v) },
+  { clave: 'enviada_at', titulo: 'Enviado', formato: fechaHora },
+  { clave: 'intentos', titulo: 'Intentos', num: true },
+  { clave: 'motivo_descarte', titulo: 'Detalle', formato: (v, f) => (v ? etiqueta(v) : f.ultimo_error ?? '—'), csv: (v, f) => String(v ?? f.ultimo_error ?? '') },
+];
+
+function AvisosRecepcion() {
+  const { data, error, cargando } = useApi<{ filas: AvisoRecepcion[] }>('/api/alertas/avisos-recepcion', 60_000);
+  const falladas = data?.filas.filter((f) => f.estado === 'error').length ?? 0;
+  const pendientes = data?.filas.filter((f) => f.estado === 'pendiente').length ?? 0;
+  return <Tarjeta
+    titulo="Avisos a recepción por correo"
+    ayuda={`Últimos 30 días. ${falladas ? `${falladas} no se pudieron enviar: revise la configuración del correo. ` : ''}${pendientes ? `${pendientes} esperan su hora de envío o un reintento. ` : ''}Un aviso descartado es uno que ya no hacía falta (el horario se ocupó o ya pasó).`}
+  >
+    <Estado cargando={cargando} error={error} hayDatos={!!data} />
+    {data && <Tabla filas={data.filas} columnas={COLUMNAS_AVISO} nombreCsv="avisos_recepcion" vacio="Aún no hay avisos a recepción por correo." />}
+  </Tarjeta>;
+}
+
 function HorariosSinInteresados() {
   const { data, error, cargando } = useApi<{ filas: HorarioSinInteresados[] }>('/api/alertas/cupos-sin-interesados', 60_000);
   return <Tarjeta titulo="Horarios liberados sin interesados" ayuda="Recepción puede ofrecer estos horarios. Se muestran mientras sigan libres y aún no haya pasado su hora; las fechas y horas son de Bogotá.">
@@ -162,6 +202,7 @@ function AlertasPanel({ rango }: { rango: Rango }) {
       )}
       <Estado cargando={cargando} error={error} hayDatos={!!data} />
       {puede('listaEspera.detalle') && <HorariosSinInteresados />}
+      {puede('listaEspera.detalle') && <AvisosRecepcion />}
       {data && (
         <>
           <Tarjeta

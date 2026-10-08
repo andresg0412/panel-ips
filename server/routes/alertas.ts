@@ -235,6 +235,22 @@ export async function alertasActivas(): Promise<Alerta[]> {
 }
 
 export default async function rutasAlertas(app: FastifyInstance) {
+  // Estado de los avisos a recepción por correo (D6/D7 del backend): cupos sin asignar, horarios sin interesados y
+  // alertas de crisis. La vista no lleva teléfonos ni datos de pacientes. Si la migración 041 aún no está, sale vacío.
+  app.get('/api/alertas/avisos-recepcion', async (req) => conCache(claveCache(req), async () => {
+    const filas = await query(
+      `SELECT notificacion_id, tipo, estado, profesional, fecha_cita, hora_cita, motivo, intentos, ultimo_error,
+              motivo_descarte, programada_para, enviada_at, creada_at
+         FROM bi.v_notificaciones_recepcion
+        WHERE creada_utc >= now() AT TIME ZONE 'UTC' - interval '30 days'
+        ORDER BY creada_utc DESC LIMIT 100`,
+    ).catch((error) => {
+      console.error('Avisos a recepción no disponibles:', error?.message ?? error);
+      return [];
+    });
+    return { filas };
+  }, 30_000));
+
   // Lista informativa de recepción: no añade banners ni aumenta el contador global de alertas.
   app.get('/api/alertas/cupos-sin-interesados', async (req) => conCache(claveCache(req), async () => ({
     filas: await query(`SELECT evento_id, fecha_cita, hora_cita, profesional, especialidad, liberado_desde, origen

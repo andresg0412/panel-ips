@@ -147,9 +147,9 @@ function ContactoAsistencia({ rango }: { rango: Rango }) {
               </div>
             </div>
             <ul className="lista-simple" style={{ marginTop: 12 }}>
-              <li><span>Recordatorio 48 h</span><span>{pct(con('con_48h'), total, 0)}</span></li>
-              <li><span>Confirmación 24 h</span><span>{pct(con('con_24h'), total, 0)}</span></li>
-              <li><span>Recordatorio 2 h</span><span>{pct(con('con_2h'), total, 0)}</span></li>
+              <li><span>Recordatorio de cita (48 h antes)</span><span>{pct(con('con_48h'), total, 0)}</span></li>
+              <li><span>Confirmación de cita (24 h antes)</span><span>{pct(con('con_24h'), total, 0)}</span></li>
+              <li><span>Recordatorio de cita (2 h antes)</span><span>{pct(con('con_2h'), total, 0)}</span></li>
               <li><span>Sin recordatorio</span><span>{num(g('sin_recordatorio')?.citas ?? 0)} citas</span></li>
               <li><span>Sin teléfono válido</span><span>{num(g('sin_telefono_valido')?.citas ?? 0)} citas</span></li>
             </ul>

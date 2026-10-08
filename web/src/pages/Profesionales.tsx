@@ -41,7 +41,7 @@ const COLUMNAS: Columna<FilaProfesional>[] = [
   { clave: 'asistio', titulo: 'Atendidas', num: true },
   {
     clave: 'no_asistio',
-    titulo: 'Asistencia',
+    titulo: 'Asistencia a citas realizadas',
     num: true,
     formato: (_v, f) => pct(f.asistio, f.asistio + f.no_asistio),
     csv: (_v, f) => pct(f.asistio, f.asistio + f.no_asistio),

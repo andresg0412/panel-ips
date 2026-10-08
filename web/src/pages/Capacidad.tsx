@@ -337,7 +337,7 @@ function ModalidadCapacidad({ rango }: { rango: Rango }) {
                       <ul className="lista-simple">
                         <li><span>Citas</span><span>{num(x.total)}</span></li>
                         <li><span>Atendidas</span><span>{num(x.asistio)}</span></li>
-                        <li><span>Asistencia</span><span>{pct(x.asistio, x.asistio + x.no_asistio)}</span></li>
+                        <li><span>Asistencia a citas realizadas</span><span>{pct(x.asistio, x.asistio + x.no_asistio)}</span></li>
                         <li><span>No ocurrieron (canceladas o movidas)</span><span>{pct(x.no_ocurrieron, x.total)}</span></li>
                       </ul>
                     ) : (

@@ -15,7 +15,9 @@ export interface DefIndicador {
 
 export const INDICADORES: Record<string, DefIndicador> = {
   atendidas: { titulo: 'Citas atendidas', tipo: 'mensual', mejorSiSube: true, defecto: null },
-  asistencia: { titulo: 'Tasa de asistencia', tipo: 'tasa', mejorSiSube: true, defecto: 0.92 },
+  asistencia: { titulo: 'Asistencia a citas realizadas', tipo: 'tasa', mejorSiSube: true, defecto: 0.92 },
+  // D11: asistió ÷ (asistió + no asistió + canceladas). Sin valor inicial: German define la meta tras ver los últimos 3 meses.
+  cumplimiento: { titulo: 'Cumplimiento de agenda', tipo: 'tasa', mejorSiSube: true, defecto: null },
   no_ocurrieron: { titulo: 'Cancelaciones y reprogramaciones', tipo: 'tasa', mejorSiSube: false, defecto: 0.25 },
   nuevos: { titulo: 'Pacientes nuevos atendidos', tipo: 'mensual', mejorSiSube: true, defecto: null },
   ocupacion: { titulo: 'Ocupación de la agenda', tipo: 'tasa', mejorSiSube: true, defecto: 0.85 },

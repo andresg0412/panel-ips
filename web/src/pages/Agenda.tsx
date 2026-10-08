@@ -46,6 +46,10 @@ interface Datos {
 // Mismo orden que los colores fijos (s1..s5): evita que el amarillo quede junto al naranja.
 const GRUPOS = ['Asistió', 'Cancelada', 'Reprogramada', 'No asistió', 'Programada', 'Sin cierre', 'Otro'];
 const tasa = (f: PorEstado) => (f.asistio + f.no_asistio ? f.asistio / (f.asistio + f.no_asistio) : null);
+// D11: cumplimiento = asistió ÷ (asistió + no asistió + canceladas); canceladas % sobre la misma base.
+const esperadas = (f: PorEstado) => f.asistio + f.no_asistio + f.canceladas;
+const cumplimiento = (f: PorEstado) => (esperadas(f) ? f.asistio / esperadas(f) : null);
+const canceladasPct = (f: PorEstado) => (esperadas(f) ? f.canceladas / esperadas(f) : null);
 
 const colsEstado = (titulo: string): Columna<PorEstado>[] => [
   { clave: 'nombre', titulo },
@@ -58,11 +62,27 @@ const colsEstado = (titulo: string): Columna<PorEstado>[] => [
   { clave: 'sin_cierre', titulo: 'Sin cierre', num: true },
   {
     clave: 'asistio',
-    titulo: 'Asistencia',
+    titulo: 'Asistencia a citas realizadas',
     num: true,
     formato: (_v, f) => pct(f.asistio, f.asistio + f.no_asistio),
     csv: (_v, f) => pct(f.asistio, f.asistio + f.no_asistio),
     orden: tasa,
+  },
+  {
+    clave: 'asistio',
+    titulo: 'Cumplimiento de agenda',
+    num: true,
+    formato: (_v, f) => pct(f.asistio, esperadas(f)),
+    csv: (_v, f) => pct(f.asistio, esperadas(f)),
+    orden: cumplimiento,
+  },
+  {
+    clave: 'canceladas',
+    titulo: 'Canceladas %',
+    num: true,
+    formato: (_v, f) => pct(f.canceladas, esperadas(f)),
+    csv: (_v, f) => pct(f.canceladas, esperadas(f)),
+    orden: canceladasPct,
   },
 ];
 const COLS_PROF = colsEstado('Profesional');
@@ -176,14 +196,16 @@ function AgendaPeriodo({ rango }: { rango: Rango }) {
         <>
           <div className="kpis">
             <Kpi etiqueta="Citas en el período" actual={tot.total} />
-            <Kpi etiqueta="Tasa de asistencia" formato="pct" actual={tasa(tot)} />
+            <Kpi etiqueta="Asistencia a citas realizadas" formato="pct" actual={tasa(tot)} ayuda="Asistió ÷ (asistió + no asistió). No cuenta las canceladas, anuladas ni reprogramadas." />
+            <Kpi etiqueta="Cumplimiento de agenda" formato="pct" actual={cumplimiento(tot)} ayuda="Asistió ÷ (asistió + no asistió + canceladas). Las anuladas (errores de registro) y las reprogramadas no cuentan." />
+            <Kpi etiqueta="Canceladas %" formato="pct" actual={canceladasPct(tot)} ayuda="Canceladas ÷ (asistió + no asistió + canceladas). Cuanto menor, mejor." />
             <Kpi etiqueta="No asistieron" actual={tot.no_asistio} />
             <Kpi etiqueta="Canceladas" actual={tot.canceladas} />
             <Kpi etiqueta="Reprogramadas" actual={tot.reprogramadas} />
             <Kpi etiqueta="Programadas (por venir)" actual={tot.programadas} />
             {(tot.sin_cierre ?? 0) > 0 && <Kpi etiqueta="Sin cierre (no se sabe si ocurrió)" actual={tot.sin_cierre ?? 0} />}
           </div>
-          <Tarjeta titulo="Citas por estado" marcas={marcas} ayuda="Asistencia = asistió ÷ (asistió + no asistió). Las canceladas y reprogramadas no cuentan porque la cita no ocurrió.">
+          <Tarjeta titulo="Citas por estado" marcas={marcas} ayuda="Asistencia a citas realizadas = asistió ÷ (asistió + no asistió). Cumplimiento de agenda = asistió ÷ (asistió + no asistió + canceladas). Las anuladas (errores de registro) y las reprogramadas no se cuentan.">
             <Grafico opcion={optSerie} />
           </Tarjeta>
           <div className="grid g2">

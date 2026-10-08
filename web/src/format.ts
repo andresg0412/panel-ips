@@ -65,15 +65,24 @@ export const DIAS = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', '
 
 const ETIQUETAS: Record<string, string> = {
   // campañas
-  execute: 'Confirmación 24 h',
-  reminder: 'Recordatorio 48 h',
-  daily: 'Recordatorio 2 h',
-  recuperacion: 'Recuperación de pacientes',
-  conasistencia: 'Seguimiento post-cita',
-  oferta_cupo: 'Oferta de cupo',
-  aviso_asesor: 'Aviso a asesor',
-  invitacion_regularizacion: 'Invitación lista de espera (regularización)',
-  invitacion_continua: 'Invitación lista de espera',
+  // D11 (tabla 6.2 de proyecto-ips/docs/features/2026-10-07-lista-espera-preguntas-y-mejoras.md). Los nombres de
+  // recuperacion y conasistencia van abreviados porque las tablas son angostas; la frase completa está en
+  // NOMBRES_COMPLETOS_CAMPANA para las ayudas.
+  execute: 'Confirmación de cita (24 h antes)',
+  reminder: 'Recordatorio de cita (48 h antes)',
+  daily: 'Recordatorio de cita (2 h antes)',
+  recuperacion: 'Recuperar: cancelaron o no asistieron',
+  conasistencia: 'Recuperar: asistieron y no volvieron',
+  oferta_cupo: 'Oferta de cupo liberado',
+  aviso_asesor: 'Aviso interno a recepción',
+  // Códigos reales de envios_whatsapp/chat_stats (le_invit_*) y de las ejecuciones (regularizacion, continua, optin_agendamiento).
+  le_invit_reg: 'Invitación a lista de espera (citas ya agendadas)',
+  le_invit_cont: 'Invitación a lista de espera (citas nuevas)',
+  regularizacion: 'Invitación a lista de espera (citas ya agendadas)',
+  continua: 'Invitación a lista de espera (citas nuevas)',
+  optin_agendamiento: 'Inscripción al agendar por el bot',
+  invitacion_regularizacion: 'Invitación a lista de espera (citas ya agendadas)',
+  invitacion_continua: 'Invitación a lista de espera (citas nuevas)',
   // respuesta a envíos
   respondio: 'Respondió',
   respondio_tarde: 'Respondió tarde',
@@ -132,6 +141,17 @@ const ETIQUETAS: Record<string, string> = {
   // motivos de cierre de cupos
   fila_agotada: 'Nadie en la fila aceptó',
   sin_candidatos: 'No había inscritos para ese cupo',
+  antelacion_critica: 'Poca antelación para ofrecerlo',
+  fuera_de_horario_antelacion_critica: 'Poca antelación y fuera del horario de contacto',
+  cascada_maxima: 'Límite de movimientos en cadena',
+  // pausas de la lista de espera
+  sin_respuesta: 'No respondió a las ofertas',
+  no_entregable: 'Su número no recibe mensajes',
+  // flujo de la lista de espera
+  inscritos: 'Se inscribieron',
+  consiguieron_cupo: 'Consiguieron un cupo',
+  salieron: 'Salieron de la lista',
+  reactivadas: 'Se reactivaron solas',
   // lista de espera
   activa: 'Activa',
   pausada: 'Pausada',
@@ -159,6 +179,12 @@ const ETIQUETAS: Record<string, string> = {
   scraper: 'Globho',
   bot: 'Bot',
   cascada: 'Lista de espera',
+};
+
+/** Frases completas de las campañas de recuperación, para ayudas y textos largos. */
+export const NOMBRES_COMPLETOS_CAMPANA: Record<string, string> = {
+  recuperacion: 'Pacientes que cancelaron o no asistieron y no volvieron',
+  conasistencia: 'Pacientes que asistieron y no volvieron a agendar',
 };
 
 /** Traduce un código interno a texto para el cliente; si no lo conoce, lo humaniza. */

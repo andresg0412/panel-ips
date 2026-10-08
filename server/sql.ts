@@ -15,7 +15,8 @@ export const GRUPO_ESTADO = `
   CASE
     WHEN estado_agenda = 'Asistio' THEN 'Asistió'
     WHEN estado_agenda = 'No Asistio' THEN 'No asistió'
-    WHEN estado_agenda IN ('Cancelado', 'Anulado') THEN 'Cancelada'
+    WHEN estado_agenda = 'Cancelado' THEN 'Cancelada'
+    WHEN estado_agenda = 'Anulado' THEN 'Anulada'
     WHEN estado_agenda = 'Reprogramar' THEN 'Reprogramada'
     WHEN estado_agenda IN ('Pendiente', 'Confirmado') AND fecha_cita < ${HOY} THEN 'Sin cierre'
     WHEN estado_agenda IN ('Pendiente', 'Confirmado') THEN 'Programada'
@@ -55,13 +56,15 @@ export const CITAS = `citas AS NOT MATERIALIZED (
     CASE
       WHEN estado_agenda = 'Asistio' THEN 'Asistió'
       WHEN estado_agenda = 'No Asistio' THEN 'No asistió'
-      WHEN estado_agenda IN ('Cancelado', 'Anulado') THEN 'Cancelada'
+      WHEN estado_agenda = 'Cancelado' THEN 'Cancelada'
+      WHEN estado_agenda = 'Anulado' THEN 'Anulada'
       WHEN estado_agenda = 'Reprogramar' THEN 'Reprogramada'
       WHEN estado_agenda IN ('Pendiente', 'Confirmado') AND fecha_cita < ${HOY} THEN 'Sin cierre'
       WHEN estado_agenda IN ('Pendiente', 'Confirmado') THEN 'Programada'
       ELSE 'Otro'
     END AS grupo,
-    NOT (cat_norm = '' OR cat_norm LIKE 'REUNION%' OR cat_norm LIKE 'GASTOS%') AS es_cita_paciente,
+    -- D11: las anuladas se tratan como errores de registro y no cuentan como cita de paciente en ningún indicador.
+    (NOT (cat_norm = '' OR cat_norm LIKE 'REUNION%' OR cat_norm LIKE 'GASTOS%') AND estado_agenda IS DISTINCT FROM 'Anulado') AS es_cita_paciente,
     CASE
       WHEN cat_norm = '' OR cat_norm LIKE 'REUNION%' OR cat_norm LIKE 'GASTOS%' THEN 'administrativa'
       WHEN cat_norm LIKE 'INTERVENCION EN CRISIS%' THEN 'crisis'

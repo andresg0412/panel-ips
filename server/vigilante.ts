@@ -269,6 +269,40 @@ const REGLAS: { nombre: string; grupo: Grupo; fn: Regla }[] = [
     },
   },
   {
+    // D6/D7: los avisos a recepción por correo. Una alerta de crisis que no sale es lo más grave que puede pasar aquí.
+    nombre: 'Avisos a recepción por correo',
+    grupo: 'lista_espera',
+    fn: async (out) => {
+      const r = await queryOne<{ errores_crisis: number; errores_cupo: number; crisis_demorada: number; cupo_demorado: number }>(
+        `SELECT count(*) FILTER (WHERE estado = 'error' AND tipo = 'crisis') AS errores_crisis,
+                count(*) FILTER (WHERE estado = 'error' AND tipo <> 'crisis') AS errores_cupo,
+                count(*) FILTER (WHERE estado = 'pendiente' AND tipo = 'crisis' AND programada_para::timestamp < now() AT TIME ZONE 'America/Bogota' - interval '15 minutes') AS crisis_demorada,
+                count(*) FILTER (WHERE estado = 'pendiente' AND tipo <> 'crisis' AND programada_para::timestamp < now() AT TIME ZONE 'America/Bogota' - interval '2 hours') AS cupo_demorado
+           FROM bi.v_notificaciones_recepcion
+          WHERE creada_utc >= now() AT TIME ZONE 'UTC' - interval '7 days'`,
+      ).catch(() => null); // sin la migración 041 todavía: no hay nada que vigilar
+      if (!r) return;
+      if (r.errores_crisis > 0 || r.crisis_demorada > 0) {
+        out.push({
+          clave: 'lista_espera:aviso_crisis', grupo: 'lista_espera', severidad: 'alta',
+          titulo: 'Una alerta de crisis no llegó a recepción por correo',
+          detalle: `${r.errores_crisis} con error de envío y ${r.crisis_demorada} sin enviar hace más de 15 minutos (últimos 7 días).`,
+          impacto: 'Un paciente en riesgo quedó bloqueado en el bot y nadie fue avisado. Revisar el correo configurado en el backend y avisar a recepción por otro medio.',
+          enlace: '#/alertas',
+        });
+      }
+      if (r.errores_cupo > 0 || r.cupo_demorado > 0) {
+        out.push({
+          clave: 'lista_espera:aviso_cupo', grupo: 'lista_espera', severidad: 'media',
+          titulo: 'Avisos de cupos a recepción sin enviar',
+          detalle: `${r.errores_cupo} con error de envío y ${r.cupo_demorado} pendientes hace más de 2 horas (últimos 7 días).`,
+          impacto: 'Recepción no se entera de los cupos que quedaron libres. Revisar la configuración del correo en el backend.',
+          enlace: '#/alertas',
+        });
+      }
+    },
+  },
+  {
     nombre: 'Errores del panel',
     grupo: 'panel',
     fn: async (out) => {

@@ -10,7 +10,7 @@ import { Estado } from '../components/ui';
 import { KpiPrincipal, ListaAtencion, ListaFrases, MedidorConfianza, conNegritas, type Confianza, type Frase, type Meta, type MetaKpi } from '../components/sala';
 import { IncidentesCtx } from '../incidentes';
 import { DIAS, etiqueta, fecha, num, pct, tasaTxt } from '../format';
-import { DEF, asistencia, noOcurrio, tramites, type DatosMetas, type DatosResumen, type Sala, type Semana } from './Resumen';
+import { DEF, asistencia, canceladasPct, cumplimiento, noOcurrio, tramites, type DatosMetas, type DatosResumen, type Sala, type Semana } from './Resumen';
 import logo from '../assets/logo-ips.webp';
 
 type Tipo = 'mes' | 'semana';
@@ -275,7 +275,8 @@ function Contenido({ tipo, periodo, ctx }: { tipo: Tipo; periodo: string; ctx: C
       <Hoja id="informe-resumen" titulo="Resumen para la gerencia" numero={pagina++}>
         <div className="kpis-principales informe-kpis">
           <KpiPrincipal etiqueta="Citas atendidas" valor={a.citas.asistio} anterior={p?.citas.asistio} comparacion={compTxt} meta={meta('atendidas')} sinMeta={sinMeta('atendidas')} serie={serie('atendidas')} definicion={DEF.atendidas} />
-          <KpiPrincipal etiqueta="Tasa de asistencia" formato="pct" valor={asistencia(a.citas)} anterior={p ? asistencia(p.citas) : undefined} comparacion={compTxt} meta={meta('asistencia')} serie={serie('asistencia')} definicion={DEF.asistencia} />
+          <KpiPrincipal etiqueta="Asistencia a citas realizadas" formato="pct" valor={asistencia(a.citas)} anterior={p ? asistencia(p.citas) : undefined} comparacion={compTxt} meta={meta('asistencia')} serie={serie('asistencia')} definicion={DEF.asistencia} />
+          <KpiPrincipal etiqueta="Cumplimiento de agenda" formato="pct" valor={cumplimiento(a.citas)} anterior={p ? cumplimiento(p.citas) : undefined} comparacion={compTxt} meta={meta('cumplimiento')} sinMeta={sinMeta('cumplimiento')} serie={serie('cumplimiento')} definicion={DEF.cumplimiento} />
           <KpiPrincipal etiqueta="Cancelaciones y reprogramaciones" formato="pct" mejorSiSube={false} valor={noOcurrio(a.citas)} anterior={p ? noOcurrio(p.citas) : undefined} comparacion={compTxt} meta={meta('no_ocurrieron')} serie={serie('no_ocurrieron')} definicion={DEF.noOcurrieron} />
           <KpiPrincipal etiqueta="Pacientes nuevos atendidos" valor={md.nuevos.nuevos} meta={meta('nuevos')} sinMeta={sinMeta('nuevos')} serie={serie('nuevos')} definicion={DEF.nuevos} />
           <KpiPrincipal etiqueta="Ocupación de la agenda" formato="pct" valor={ocupacion} meta={meta('ocupacion')} serie={serie('ocupacion')} definicion={DEF.ocupacion} />
@@ -308,6 +309,7 @@ function Contenido({ tipo, periodo, ctx }: { tipo: Tipo; periodo: string; ctx: C
                 <li><span>Atendidas</span><span>{num(a.citas.asistio)}</span></li>
                 <li><span>No asistieron</span><span>{num(a.citas.no_asistio)}</span></li>
                 <li><span>Canceladas</span><span>{num(a.citas.canceladas)}</span></li>
+                <li><span>Canceladas sobre las citas esperadas</span><span>{tasaTxt(canceladasPct(a.citas))}</span></li>
                 <li><span>Reprogramadas</span><span>{num(a.citas.reprogramadas)}</span></li>
                 <li><span>Horas de consulta liberadas</span><span>{num(Math.round(k.horas))}</span></li>
                 {a.citas.sin_cierre > 0 && <li><span>Sin cierre en Globho</span><span>{num(a.citas.sin_cierre)}</span></li>}

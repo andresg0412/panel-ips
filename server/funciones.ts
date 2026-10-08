@@ -241,6 +241,7 @@ export const ENDPOINTS: Record<string, string> = {
   'GET /api/alertas': 'alertas.panel',
   'GET /api/alertas/salud': 'alertas.panel',
   'GET /api/alertas/cupos-sin-interesados': 'listaEspera.detalle',
+  'GET /api/alertas/avisos-recepcion': 'listaEspera.detalle',
   'POST /api/alertas/revisar': 'alertas.revisar',
   'GET /api/sistema': 'alertas.panel',
 

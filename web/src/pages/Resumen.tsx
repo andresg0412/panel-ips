@@ -24,7 +24,7 @@ export interface DatosMetas {
   ocupacion: { cupos: number; ocupan: number };
   capacidadDesde: string;
 }
-export interface Semana { semana: string; atendidas: number; asistencia: number | null; no_ocurrieron: number | null; nuevos: number; tramites: number; ocupacion: number | null }
+export interface Semana { semana: string; atendidas: number; asistencia: number | null; cumplimiento: number | null; no_ocurrieron: number | null; nuevos: number; tramites: number; ocupacion: number | null }
 export interface Sala { tendencia: Semana[]; relevante: Frase[]; atencion: ItemAtencion[] }
 interface DatosSeries {
   rango: { grano: string };
@@ -39,6 +39,10 @@ const GRUPOS = ['Asistió', 'Cancelada', 'Reprogramada', 'No asistió', 'Program
 const ESPECIALIDADES = ['Psicología', 'Psiquiatría', 'Neuropsicología'];
 
 export const asistencia = (c: N) => ratio(c.asistio, c.asistio + c.no_asistio);
+/** Cumplimiento de agenda (D11): de las citas que se esperaba atender, cuántas se atendieron. Las anuladas y reprogramadas no cuentan. */
+export const cumplimiento = (c: N) => ratio(c.asistio, c.asistio + c.no_asistio + c.canceladas);
+/** Canceladas sobre las mismas citas del cumplimiento: cumplimiento + inasistencia + canceladas = 100 %. */
+export const canceladasPct = (c: N) => ratio(c.canceladas, c.asistio + c.no_asistio + c.canceladas);
 export const respuesta = (e: N) => ratio(e.respondieron, e.enviados_con_respuesta);
 export const noOcurrio = (c: N) => ratio(c.canceladas + c.reprogramadas, c.total);
 /** Trámites que el bot resolvió sin recepción (RES-03). */
@@ -46,7 +50,9 @@ export const tramites = (i: Indicadores) => i.envios.confirmaron + i.sesiones.ci
 
 export const DEF = {
   atendidas: 'Citas de pacientes que se atendieron en el período. No incluye reuniones internas ni bloques administrativos.',
-  asistencia: 'De las citas que debían ocurrir (atendidas + inasistencias), cuántas se atendieron. Las canceladas y reprogramadas no cuentan.',
+  asistencia: 'Asistencia a citas realizadas: de las citas que llegaron a su hora (atendidas + inasistencias), cuántas se atendieron. Las canceladas, anuladas y reprogramadas no cuentan.',
+  cumplimiento: 'Cumplimiento de agenda: de las citas que se esperaba atender (atendidas + inasistencias + canceladas), cuántas se atendieron. Las anuladas (errores de registro) y las reprogramadas no cuentan.',
+  canceladas: 'Canceladas sobre las citas que se esperaba atender (atendidas + inasistencias + canceladas). Cuanto menor, mejor.',
   noOcurrieron: 'Citas canceladas o reprogramadas sobre el total de citas del período. Cuanto menor, mejor.',
   nuevos: 'Pacientes cuya primera cita atendida (desde agosto de 2025) cae en el período.',
   ocupacion: 'Cupos del horario de cada profesional ocupados por citas de pacientes, en días ya pasados. Solo profesionales con horario registrado.',
@@ -170,13 +176,15 @@ export default function Resumen({ rango }: { rango: Rango }) {
           {conSala ? (
             <div className="kpis-principales">
               <KpiPrincipal etiqueta="Citas atendidas" valor={a.citas.asistio} anterior={p?.citas.asistio} comparacion={comp} meta={meta('atendidas')} sinMeta={sinMeta('atendidas')} serie={serie('atendidas')} parcial={parcial} definicion={DEF.atendidas} />
-              <KpiPrincipal etiqueta="Tasa de asistencia" formato="pct" valor={asistencia(a.citas)} anterior={p ? asistencia(p.citas) : undefined} comparacion={comp} meta={meta('asistencia')} serie={serie('asistencia')} definicion={DEF.asistencia} />
+              <KpiPrincipal etiqueta="Asistencia a citas realizadas" formato="pct" valor={asistencia(a.citas)} anterior={p ? asistencia(p.citas) : undefined} comparacion={comp} meta={meta('asistencia')} serie={serie('asistencia')} definicion={DEF.asistencia} />
+              <KpiPrincipal etiqueta="Cumplimiento de agenda" formato="pct" valor={cumplimiento(a.citas)} anterior={p ? cumplimiento(p.citas) : undefined} comparacion={comp} meta={meta('cumplimiento')} sinMeta={sinMeta('cumplimiento')} serie={serie('cumplimiento')} definicion={DEF.cumplimiento} />
               <KpiPrincipal etiqueta="Ocupación de la agenda" formato="pct" valor={ocupacion} meta={meta('ocupacion')} serie={serie('ocupacion')} definicion={DEF.ocupacion} />
             </div>
           ) : (
             <div className="kpis-principales">
               <KpiPrincipal etiqueta="Citas atendidas" valor={a.citas.asistio} definicion={DEF.atendidas} />
-              <KpiPrincipal etiqueta="Tasa de asistencia" formato="pct" valor={asistencia(a.citas)} definicion={DEF.asistencia} />
+              <KpiPrincipal etiqueta="Asistencia a citas realizadas" formato="pct" valor={asistencia(a.citas)} definicion={DEF.asistencia} />
+              <KpiPrincipal etiqueta="Cumplimiento de agenda" formato="pct" valor={cumplimiento(a.citas)} definicion={DEF.cumplimiento} />
               <KpiPrincipal etiqueta="Citas nuevas registradas" valor={a.citas.registradas} definicion={DEF.registradas} />
             </div>
           )}
@@ -185,6 +193,7 @@ export default function Resumen({ rango }: { rango: Rango }) {
             <div className="kpis kpis-secundarios">
               {conSala ? <>
                 <KpiPrincipal etiqueta="Cancelaciones y reprogramaciones" formato="pct" mejorSiSube={false} valor={noOcurrio(a.citas)} anterior={p ? noOcurrio(p.citas) : undefined} comparacion={comp} meta={meta('no_ocurrieron')} serie={serie('no_ocurrieron')} definicion={DEF.noOcurrieron} />
+                <KpiPrincipal etiqueta="Canceladas" formato="pct" mejorSiSube={false} valor={canceladasPct(a.citas)} anterior={p ? canceladasPct(p.citas) : undefined} comparacion={comp} definicion={DEF.canceladas} />
                 <KpiPrincipal etiqueta="Pacientes nuevos atendidos" valor={md ? md.nuevos.nuevos : null} meta={meta('nuevos')} sinMeta={sinMeta('nuevos')} serie={serie('nuevos')} parcial={parcial} definicion={DEF.nuevos} />
                 <KpiPrincipal etiqueta="Trámites resueltos por WhatsApp" valor={tramites(a)} anterior={p ? tramites(p) : undefined} comparacion={comp} meta={meta('tramites')} sinMeta={sinMeta('tramites')} serie={serie('tramites')} parcial={parcial} definicion={DEF.tramites} />
               </> : <>

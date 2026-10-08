@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { conRango, useApi, type Rango } from '../api';
 import Grafico from '../components/Grafico';
-import { embudo } from '../components/series';
+import { barrasApiladas, embudo, pivotar } from '../components/series';
 import { Estado, Kpi, ListaConteo, Tabla, Tarjeta, type Columna } from '../components/ui';
 import { etiqueta, fecha, fechaHora, hora, num } from '../format';
 import { Bloqueado, Restringido, useAcceso } from '../acceso';
@@ -37,7 +37,27 @@ interface Ejecucion {
   errores: number;
   motivo_fin: string | null;
 }
+interface Ahora {
+  activas: number;
+  con_oferta_en_curso: number;
+  esperando_cupo: number;
+  sin_cita_elegible: number;
+  pausadas: number;
+  cupos_en_espera: number;
+}
+interface Respuesta {
+  ofertas: number;
+  con_toque: number;
+  aceptaciones_perdidas: number;
+  minutos_a_leer: number | null;
+  minutos_a_responder: number | null;
+}
 interface Datos {
+  ahora: Ahora;
+  pausadas: Conteo[];
+  flujoPeriodo: Conteo[];
+  flujoDiario: { dia: string; clave: string; n: number }[];
+  respuesta: Respuesta;
   inscripcionesHoy: Conteo[];
   inscripciones: Conteo[];
   cupos: Conteo[];
@@ -62,6 +82,9 @@ interface Datos {
 const lista = (c: Conteo[]) => c.map((x) => ({ clave: x.clave, etiqueta: etiqueta(x.clave), n: x.n }));
 const suma = (c: Conteo[]) => c.reduce((s, x) => s + x.n, 0);
 const de = (c: Conteo[], clave: string) => c.find((x) => x.clave === clave)?.n ?? 0;
+/** Minutos como texto corto: "45 min", "3 h". */
+const minutosTxt = (m: number | null) => (m === null || m === undefined ? '—' : m < 90 ? `${num(m)} min` : `${num(Math.round(m / 6) / 10)} h`);
+const FLUJO = ['inscritos', 'consiguieron_cupo', 'salieron', 'reactivadas'];
 const cita = (v: string | null, f: { hora_cita: string | null }) => (v ? `${fecha(v)} ${hora(f.hora_cita)}` : '—');
 
 const COLS_CUPO: Columna<Cupo>[] = [
@@ -108,13 +131,43 @@ export default function ListaEspera({ rango }: { rango: Rango }) {
     ]);
   }, [data]);
 
+  const optFlujo = useCallback(() => {
+    const filas = data!.flujoDiario.map((f) => ({ periodo: f.dia, grupo: etiqueta(f.clave), n: f.n }));
+    const { periodos, series } = pivotar(filas, 'grupo', 'n', FLUJO.map(etiqueta));
+    return barrasApiladas(periodos, series, 'day');
+  }, [data]);
+
   return (
     <>
       <Estado cargando={cargando} error={error} hayDatos={!!data} />
       {data && (
         <>
+          <Tarjeta
+            titulo="En lista de espera ahora"
+            ayuda="Foto de este momento (no depende del período elegido). Activa = inscripción vigente; esperando cupo = su cita sigue vigente y no tiene una oferta en curso."
+          >
+            <div className="cifras">
+              <div className="cifra"><div className="n">{num(data.ahora.activas)}</div><div className="t">inscripciones activas</div></div>
+              <div className="cifra"><div className="n">{num(data.ahora.esperando_cupo)}</div><div className="t">esperando un cupo</div></div>
+              <div className="cifra"><div className="n">{num(data.ahora.con_oferta_en_curso)}</div><div className="t">con una oferta en curso</div></div>
+              <div className="cifra"><div className="n">{num(data.ahora.sin_cita_elegible)}</div><div className="t">sin cita vigente (no reciben ofertas)</div></div>
+              <div className="cifra"><div className="n">{num(data.ahora.pausadas)}</div><div className="t">pausadas</div></div>
+              <div className="cifra"><div className="n">{num(data.ahora.cupos_en_espera)}</div><div className="t">cupos esperando candidatos</div></div>
+            </div>
+            {data.pausadas.length > 0 && (
+              <>
+                <p className="ayuda" style={{ marginTop: 12 }}>Pausadas, por motivo:</p>
+                <ListaConteo items={lista(data.pausadas)} total={suma(data.pausadas)} />
+              </>
+            )}
+            <div className="cifras" style={{ marginTop: 12 }}>
+              {FLUJO.map((k) => (
+                <div className="cifra" key={k}><div className="n">{num(de(data.flujoPeriodo, k))}</div><div className="t">{etiqueta(k).toLowerCase()} (período)</div></div>
+              ))}
+            </div>
+            {data.flujoDiario.length > 0 && <Grafico opcion={optFlujo} alto={220} />}
+          </Tarjeta>
           <div className="kpis">
-            <Kpi etiqueta="Inscritos activos hoy" actual={de(data.inscripcionesHoy, 'activa')} />
             {detalle && (
               <>
                 <Kpi etiqueta="Nuevas inscripciones" actual={suma(data.inscripciones)} />
@@ -149,6 +202,17 @@ export default function ListaEspera({ rango }: { rango: Rango }) {
               )}
             </Tarjeta>
           </div>
+          <Tarjeta
+            titulo="Qué tan bien responden los pacientes a las ofertas"
+            ayuda="Toque = el paciente tocó un botón de la oferta. Aceptación perdida = tocó «Sí» cuando la oferta ya había vencido. Los tiempos son la mediana del período."
+          >
+            <div className="cifras">
+              <div className="cifra"><div className="n">{data.respuesta.ofertas ? `${Math.round((data.respuesta.con_toque / data.respuesta.ofertas) * 100)} %` : '—'}</div><div className="t">de las ofertas recibió un toque ({num(data.respuesta.con_toque)} de {num(data.respuesta.ofertas)})</div></div>
+              <div className="cifra"><div className="n">{num(data.respuesta.aceptaciones_perdidas)}</div><div className="t">aceptaciones perdidas por plazo</div></div>
+              <div className="cifra"><div className="n">{minutosTxt(data.respuesta.minutos_a_leer)}</div><div className="t">hasta leer la oferta</div></div>
+              <div className="cifra"><div className="n">{minutosTxt(data.respuesta.minutos_a_responder)}</div><div className="t">hasta responder</div></div>
+            </div>
+          </Tarjeta>
           <div className="grid g3">
             <Tarjeta titulo="Inscripciones del período" ayuda="Estado actual de cada inscripción.">
               <ListaConteo items={lista(data.inscripciones)} total={suma(data.inscripciones)} />
