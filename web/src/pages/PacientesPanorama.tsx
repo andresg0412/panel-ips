@@ -5,6 +5,7 @@ import { barrasApiladas, ranking } from '../components/series';
 import { Estado, Kpi, Tarjeta } from '../components/ui';
 import { useMarcas, useMesesConfiables, useSombras } from '../incidentes';
 import { etiqueta, num } from '../format';
+import { Restringido, useAcceso } from '../acceso';
 
 interface Panorama {
   mensual: { mes: string; nuevos: number; recurrentes: number }[];
@@ -15,6 +16,9 @@ interface Panorama {
 
 export default function PacientesPanorama({ rango }: { rango: Rango }) {
   const { data, error, cargando } = useApi<Panorama>(conRango('/api/pacientes/panorama', rango), 300_000);
+  const { puede } = useAcceso();
+  // Tiempo entre citas y perfil de los pacientes son del plan Intermedio: el servidor los entrega vacíos al Básico.
+  const verPerfil = puede('pacientes.perfil');
   const sombras = useSombras(['agenda']);
   const marcasHistoria = useMarcas({ desde: '2025-08-01', hasta: rango.hasta }, ['agenda']);
 
@@ -83,10 +87,11 @@ export default function PacientesPanorama({ rango }: { rango: Rango }) {
       {data && ri && (
         <>
           <div className="kpis">
-            <Kpi etiqueta="Pacientes atendidos en el período" actual={atendidos} />
+            {/* "Atendidos" se calcula con el perfil y los días entre citas con los intervalos: sin el plan, se ocultan. */}
+            {verPerfil && <Kpi etiqueta="Pacientes atendidos en el período" actual={atendidos} />}
             <Kpi etiqueta="Pacientes nuevos por mes (promedio reciente)" actual={promNuevos} />
-            <Kpi etiqueta="Días típicos entre citas" valor={`${Math.round(ri.mediana)} días`} actual={null} />
-            <Kpi etiqueta="La mitad vuelve entre" valor={`${Math.round(ri.p25)} y ${Math.round(ri.p75)} días`} actual={null} />
+            {verPerfil && <Kpi etiqueta="Días típicos entre citas" valor={`${Math.round(ri.mediana)} días`} actual={null} />}
+            {verPerfil && <Kpi etiqueta="La mitad vuelve entre" valor={`${Math.round(ri.p25)} y ${Math.round(ri.p75)} días`} actual={null} />}
           </div>
           <Tarjeta
             titulo="Pacientes nuevos y recurrentes atendidos por mes"
@@ -95,30 +100,32 @@ export default function PacientesPanorama({ rango }: { rango: Rango }) {
           >
             <Grafico opcion={optMensual} alto={280} />
           </Tarjeta>
-          <Tarjeta
-            titulo="¿Cada cuánto vuelven los pacientes?"
-            ayuda={`Tiempo entre una atención y la siguiente del mismo paciente (${num(ri.n)} casos desde agosto de 2025).`}
-          >
-            <Grafico opcion={optIntervalos} alto={260} />
-          </Tarjeta>
-          <h3 style={{ margin: '24px 0 12px' }}>Perfil de los pacientes atendidos en el período</h3>
-          <div className="grid g3">
-            <Tarjeta titulo="Edad">
-              <Grafico opcion={optEdad} alto={220} />
+          <Restringido clave="pacientes.perfil" titulo="Tiempo entre citas y perfil de los pacientes" alto={260}>
+            <Tarjeta
+              titulo="¿Cada cuánto vuelven los pacientes?"
+              ayuda={`Tiempo entre una atención y la siguiente del mismo paciente (${num(ri.n)} casos desde agosto de 2025).`}
+            >
+              <Grafico opcion={optIntervalos} alto={260} />
             </Tarjeta>
-            <Tarjeta titulo="Especialidad">
-              <Grafico opcion={optEspecialidad} alto={220} />
-            </Tarjeta>
-            <Tarjeta titulo="Particular o convenio">
-              <Grafico opcion={optPago} alto={220} />
-            </Tarjeta>
-            <Tarjeta titulo="Régimen">
-              <Grafico opcion={optRegimen} alto={220} />
-            </Tarjeta>
-            <Tarjeta titulo="Modalidad de su última cita">
-              <Grafico opcion={optModalidad} alto={220} />
-            </Tarjeta>
-          </div>
+            <h3 style={{ margin: '24px 0 12px' }}>Perfil de los pacientes atendidos en el período</h3>
+            <div className="grid g3">
+              <Tarjeta titulo="Edad">
+                <Grafico opcion={optEdad} alto={220} />
+              </Tarjeta>
+              <Tarjeta titulo="Especialidad">
+                <Grafico opcion={optEspecialidad} alto={220} />
+              </Tarjeta>
+              <Tarjeta titulo="Particular o convenio">
+                <Grafico opcion={optPago} alto={220} />
+              </Tarjeta>
+              <Tarjeta titulo="Régimen">
+                <Grafico opcion={optRegimen} alto={220} />
+              </Tarjeta>
+              <Tarjeta titulo="Modalidad de su última cita">
+                <Grafico opcion={optModalidad} alto={220} />
+              </Tarjeta>
+            </div>
+          </Restringido>
         </>
       )}
     </>
