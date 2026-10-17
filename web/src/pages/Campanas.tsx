@@ -15,13 +15,14 @@ interface FilaCampana {
   enviados: number;
   fallidos: number;
   entregados: number;
-  leidos: number;
-  respondieron: number;
-  respondieron_tarde: number;
-  no_respondieron: number;
-  pendientes: number;
   citas_confirmadas: number;
-  citas_canceladas: number;
+  // Lectura y respuesta de los pacientes son del plan Intermedio (campanas.respuesta): en el Básico llegan en null.
+  leidos: number | null;
+  respondieron: number | null;
+  respondieron_tarde: number | null;
+  no_respondieron: number | null;
+  pendientes: number | null;
+  citas_canceladas: number | null;
 }
 interface Datos {
   rango: { grano: string };
@@ -82,19 +83,25 @@ interface Envio {
 const PRINCIPALES = ['execute', 'reminder', 'daily', 'recuperacion', 'conasistencia'];
 const si = (v: boolean) => (v ? 'Sí' : '—');
 
+/** Respondieron a tiempo + tarde (null cuenta como 0: solo se usa en columnas que el Básico no ve). */
+const respondieron = (f: FilaCampana) => (f.respondieron ?? 0) + (f.respondieron_tarde ?? 0);
+/** Columnas de lectura y respuesta de los pacientes: se ocultan sin `campanas.respuesta` (plan Intermedio). */
+const COLS_RESPUESTA = ['leidos', 'respondieron', 'citas_canceladas'];
+
 const COLS_CAMPANA: Columna<FilaCampana>[] = [
   { clave: 'campana', titulo: 'Campaña', formato: etiqueta, csv: etiqueta },
   { clave: 'dias', titulo: 'Días con envíos', num: true },
   { clave: 'enviados', titulo: 'Enviados', num: true },
   { clave: 'fallidos', titulo: 'Fallidos', num: true },
+  { clave: 'entregados', titulo: 'Entregados', num: true },
   { clave: 'leidos', titulo: 'Leídos', num: true },
   {
     clave: 'respondieron',
     titulo: 'Respondieron',
     num: true,
-    formato: (_v, f) => `${num(f.respondieron + f.respondieron_tarde)} (${pct(f.respondieron + f.respondieron_tarde, f.enviados, 0)})`,
-    csv: (_v, f) => String(f.respondieron + f.respondieron_tarde),
-    orden: (f) => f.respondieron + f.respondieron_tarde,
+    formato: (_v, f) => `${num(respondieron(f))} (${pct(respondieron(f), f.enviados, 0)})`,
+    csv: (_v, f) => String(respondieron(f)),
+    orden: respondieron,
   },
   {
     clave: 'citas_confirmadas',
@@ -126,6 +133,8 @@ function CampanasResultados({ rango }: { rango: Rango }) {
   const { data, error, cargando } = useApi<Datos>(conRango('/api/campanas', rango), 60_000);
   const { puede } = useAcceso();
   const exportarPersonales = puede('exportar.personales');
+  const verRespuesta = puede('campanas.respuesta');
+  const columnas = verRespuesta ? COLS_CAMPANA : COLS_CAMPANA.filter((c) => !COLS_RESPUESTA.includes(c.clave as string));
   const calidad = useApi<Calidad>(puede('campanas.calidad') ? conRango('/api/campanas/calidad', rango) : null, 300_000);
   const sombras = useSombras(['whatsapp', 'trazabilidad']);
   const marcas = useMarcas(rango, ['whatsapp', 'trazabilidad'], data?.entregaDesde);
@@ -189,11 +198,13 @@ function CampanasResultados({ rango }: { rango: Rango }) {
             titulo="Resultados por campaña"
             marcas={marcas}
             ayuda={`Confirmaron: respondieron "confirmo" o la cita pasó a confirmada después del mensaje. ${
-              data.entregaDesde ? `Entregados y leídos se conocen desde el ${fecha(data.entregaDesde)}.` : ''
+              data.entregaDesde ? `${verRespuesta ? 'Entregados y leídos se conocen' : 'Entregados se conocen'} desde el ${fecha(data.entregaDesde)}.` : ''
             }`}
           >
-            <Tabla filas={data.porCampana} columnas={COLS_CAMPANA} nombreCsv={`campanas_${rango.desde}_${rango.hasta}`} />
+            <Tabla filas={data.porCampana} columnas={columnas} nombreCsv={`campanas_${rango.desde}_${rango.hasta}`} />
           </Tarjeta>
+          {/* Un solo candado le avisa al Básico que la lectura y la respuesta existen, sin llenar la pantalla de avisos. */}
+          {!verRespuesta && <Bloqueado clave="campanas.respuesta" titulo="Lectura y respuesta de los pacientes" />}
           <Tarjeta titulo="Mensajes enviados por campaña">
             <Grafico opcion={opcion} />
           </Tarjeta>
@@ -292,7 +303,9 @@ export default function Campanas({ rango }: { rango: Rango }) {
           ['ejecuciones', '¿Se ejecutaron correctamente?'],
         ]}
         descripciones={{
-          resultados: 'Vea cuántos mensajes se enviaron, respondieron y confirmaron por campaña.',
+          resultados: puede('campanas.respuesta')
+            ? 'Vea cuántos mensajes se enviaron, respondieron y confirmaron por campaña.'
+            : 'Vea cuántos mensajes se enviaron y confirmaron por campaña.',
           efecto: 'Compare el comportamiento de las citas después de recibir una campaña.',
           desempeno: 'Encuentre las campañas con mejor respuesta, oportunidad y continuidad.',
           ejecuciones: 'Compruebe qué campañas corrieron cada día y qué volumen procesaron.',

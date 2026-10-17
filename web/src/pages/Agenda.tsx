@@ -208,34 +208,36 @@ function AgendaPeriodo({ rango }: { rango: Rango }) {
           <Tarjeta titulo="Citas por estado" marcas={marcas} ayuda="Asistencia a citas realizadas = asistió ÷ (asistió + no asistió). Cumplimiento de agenda = asistió ÷ (asistió + no asistió + canceladas). Las anuladas (errores de registro) y las reprogramadas no se cuentan.">
             <Grafico opcion={optSerie} />
           </Tarjeta>
-          <div className="grid g2">
-            <Tarjeta titulo="Por especialidad">
-              <Tabla filas={data.especialidad} columnas={COLS_ESP} nombreCsv="agenda_especialidad" />
-            </Tarjeta>
-            <Tarjeta titulo="Asistencia por día de la semana">
-              <Grafico opcion={optDia} alto={240} />
-            </Tarjeta>
-          </div>
-          <Tarjeta titulo="Por tipo de atención" ayuda="No ocurrieron = canceladas + reprogramadas. Horas perdidas: duración de esas citas.">
-            <Tabla filas={data.servicio} columnas={COLS_SERV} nombreCsv="agenda_tipo_atencion" />
+          <Tarjeta titulo="Por especialidad">
+            <Tabla filas={data.especialidad} columnas={COLS_ESP} nombreCsv="agenda_especialidad" />
           </Tarjeta>
           <Tarjeta titulo="Por profesional" ayuda="Haga clic en un encabezado para ordenar. La ficha completa está en Profesionales.">
             <Tabla filas={data.profesional} columnas={COLS_PROF} nombreCsv={`agenda_profesional_${rango.desde}_${rango.hasta}`} />
           </Tarjeta>
-          <div className="grid g2">
+          {/* Todo lo que sigue es del plan Intermedio (agenda.desglose). Es un solo bloque para no llenar la pantalla de
+              candados: el servidor ya entrega estas secciones vacías al Básico. */}
+          <Restringido clave="agenda.desglose" titulo="Citas por convenio, tipo de servicio y día, origen de las cancelaciones y últimos cambios" alto={260}>
+            <div className="grid g2">
+              <Tarjeta titulo="Asistencia por día de la semana">
+                <Grafico opcion={optDia} alto={240} />
+              </Tarjeta>
+              <Tarjeta titulo="¿Quién canceló?" ayuda="El detalle de origen existe solo para cancelaciones hechas por el bot desde el 30 sep 2026; el resto llega de Globho sin ese dato.">
+                <ListaConteo items={data.origenCancelacion.map((o) => ({ clave: o.origen, etiqueta: etiqueta(o.origen), n: o.n }))} total={totalCanceladas} />
+              </Tarjeta>
+            </div>
+            <Tarjeta titulo="Por tipo de atención" ayuda="No ocurrieron = canceladas + reprogramadas. Horas perdidas: duración de esas citas.">
+              <Tabla filas={data.servicio} columnas={COLS_SERV} nombreCsv="agenda_tipo_atencion" />
+            </Tarjeta>
             <Tarjeta titulo="Por convenio / administradora" ayuda="Las 15 con más citas.">
               <Tabla filas={data.administradora} columnas={COLS_ADM} nombreCsv="agenda_convenio" />
             </Tarjeta>
-            <Tarjeta titulo="¿Quién canceló?" ayuda="El detalle de origen existe solo para cancelaciones hechas por el bot desde el 30 sep 2026; el resto llega de Globho sin ese dato.">
-              <ListaConteo items={data.origenCancelacion.map((o) => ({ clave: o.origen, etiqueta: etiqueta(o.origen), n: o.n }))} total={totalCanceladas} />
+            <Tarjeta titulo="Últimos cambios de estado" ayuda="Registro disponible desde fines de septiembre de 2026.">
+              <Tabla filas={data.cambios} columnas={COLS_CAMBIO} nombreCsv="cambios_estado" vacio="Sin cambios registrados en este período" />
             </Tarjeta>
-          </div>
+          </Restringido>
           <Restringido clave="agenda.inasistencia" titulo="¿Con cuánta anticipación cancelan?">
             <AnticipacionCancelaciones rango={rango} />
           </Restringido>
-          <Tarjeta titulo="Últimos cambios de estado" ayuda="Registro disponible desde fines de septiembre de 2026.">
-            <Tabla filas={data.cambios} columnas={COLS_CAMBIO} nombreCsv="cambios_estado" vacio="Sin cambios registrados en este período" />
-          </Tarjeta>
         </>
       )}
     </>

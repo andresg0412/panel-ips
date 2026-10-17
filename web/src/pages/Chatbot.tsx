@@ -7,7 +7,7 @@ import { DIAS, etiqueta, fecha, num, pct } from '../format';
 import { Pestanas, useMarcas, usePestana, useSombras } from '../incidentes';
 import { DemandaChatbot } from './ChatbotDemanda';
 import ChatbotValor from './ChatbotValor';
-import { Restringido, useAcceso } from '../acceso';
+import { Bloqueado, Restringido, useAcceso } from '../acceso';
 
 type Conteo = { clave: string; n: number };
 interface Datos {
@@ -18,8 +18,9 @@ interface Datos {
     abandonadas: number;
     mediana_min: number | null;
     mensajes_promedio: number | null;
-    fuera_horario: number;
-    derivadas_fuera_horario: number;
+    // En el plan Básico el servidor entrega estas cuatro cifras en null (chatbot.detalle).
+    fuera_horario: number | null;
+    derivadas_fuera_horario: number | null;
   };
   conversion: { clave: string; entraron: number; lograron: number; derivadas: number }[];
   serie: { periodo: string; completadas: number; abandonadas: number }[];
@@ -121,6 +122,7 @@ export default function Chatbot({ rango }: { rango: Rango }) {
 }
 
 function Conversaciones({ rango }: { rango: Rango }) {
+  const { puede } = useAcceso();
   const { data, error, cargando } = useApi<Datos>(conRango('/api/chatbot', rango), 60_000);
   const sombras = useSombras(['conversaciones']);
   const marcas = useMarcas(rango, ['conversaciones']);
@@ -155,6 +157,8 @@ function Conversaciones({ rango }: { rango: Rango }) {
   }, [data]);
 
   const k = data?.kpis;
+  // Horas pico, conversión por trámite, primer trámite y duración/horario son del plan Intermedio (chatbot.detalle).
+  const detalle = puede('chatbot.detalle');
 
   return (
     <>
@@ -165,34 +169,36 @@ function Conversaciones({ rango }: { rango: Rango }) {
             <Kpi etiqueta="Conversaciones" actual={k.sesiones} />
             <Kpi etiqueta="Personas distintas" actual={k.personas} />
             <Kpi etiqueta="Abandonadas" valor={pct(k.abandonadas, k.sesiones)} actual={null} />
-            <Kpi etiqueta="Duración típica" valor={k.mediana_min === null ? '—' : `${String(k.mediana_min).replace('.', ',')} min`} actual={null} />
-            <Kpi etiqueta="Fuera del horario de recepción" valor={pct(k.fuera_horario, k.sesiones, 0)} actual={null} />
+            {detalle && <Kpi etiqueta="Duración típica" valor={k.mediana_min === null ? '—' : `${String(k.mediana_min).replace('.', ',')} min`} actual={null} />}
+            {detalle && <Kpi etiqueta="Fuera del horario de recepción" valor={pct(k.fuera_horario ?? 0, k.sesiones, 0)} actual={null} />}
           </div>
-          <Tarjeta
-            titulo="¿Cuántos logran lo que vinieron a hacer?"
-            marcas={marcas}
-            ayuda="De las conversaciones que entraron a cada trámite, cuántas terminaron con el trámite hecho. El resto abandonó, pidió un asesor o no encontró lo que buscaba."
-          >
-            <div className="cifras">
-              {data.conversion.map((c) => (
-                <div className="cifra" key={c.clave}>
-                  <div className="n">{pct(c.lograron, c.entraron, 0)}</div>
-                  <div className="t">
-                    <b>{etiqueta(c.clave)}</b>: {num(c.lograron)} de {num(c.entraron)} conversaciones
-                    {c.derivadas > 0 ? ` · ${num(c.derivadas)} pasaron a un asesor` : ''}
+          <Restringido clave="chatbot.detalle" titulo="¿Cuántos logran lo que vinieron a hacer?">
+            <Tarjeta
+              titulo="¿Cuántos logran lo que vinieron a hacer?"
+              marcas={marcas}
+              ayuda="De las conversaciones que entraron a cada trámite, cuántas terminaron con el trámite hecho. El resto abandonó, pidió un asesor o no encontró lo que buscaba."
+            >
+              <div className="cifras">
+                {data.conversion.map((c) => (
+                  <div className="cifra" key={c.clave}>
+                    <div className="n">{pct(c.lograron, c.entraron, 0)}</div>
+                    <div className="t">
+                      <b>{etiqueta(c.clave)}</b>: {num(c.lograron)} de {num(c.entraron)} conversaciones
+                      {c.derivadas > 0 ? ` · ${num(c.derivadas)} pasaron a un asesor` : ''}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-            {data.conversion.some((c) => c.clave === 'agendar' && c.entraron > 0 && c.lograron / c.entraron < 0.3) && (
-              <p className="nota">
-                Agendar convierte poco. La pestaña «Paso a paso» muestra en qué paso se quedan.
-              </p>
-            )}
-            {k.derivadas_fuera_horario > 0 && (
-              <p className="nota">{num(k.derivadas_fuera_horario)} personas pidieron un asesor fuera de horario y no pudieron ser atendidas en el momento.</p>
-            )}
-          </Tarjeta>
+                ))}
+              </div>
+              {data.conversion.some((c) => c.clave === 'agendar' && c.entraron > 0 && c.lograron / c.entraron < 0.3) && (
+                <p className="nota">
+                  Agendar convierte poco. La pestaña «Paso a paso» muestra en qué paso se quedan.
+                </p>
+              )}
+              {(k.derivadas_fuera_horario ?? 0) > 0 && (
+                <p className="nota">{num(k.derivadas_fuera_horario ?? 0)} personas pidieron un asesor fuera de horario y no pudieron ser atendidas en el momento.</p>
+              )}
+            </Tarjeta>
+          </Restringido>
           <Tarjeta titulo="Conversaciones por período">
             <Grafico opcion={optSerie} />
           </Tarjeta>
@@ -200,13 +206,19 @@ function Conversaciones({ rango }: { rango: Rango }) {
             <Tarjeta titulo="¿Cómo terminaron?" ayuda="Resultado de cada conversación.">
               <Grafico opcion={optResultado} alto={280} />
             </Tarjeta>
-            <Tarjeta titulo="¿A qué vinieron?" ayuda="Primer trámite que eligieron en la conversación.">
-              <Grafico opcion={optFlujo} alto={280} />
-            </Tarjeta>
+            {detalle ? (
+              <Tarjeta titulo="¿A qué vinieron?" ayuda="Primer trámite que eligieron en la conversación.">
+                <Grafico opcion={optFlujo} alto={280} />
+              </Tarjeta>
+            ) : (
+              <Bloqueado clave="chatbot.detalle" titulo="¿A qué vinieron?" alto={280} />
+            )}
           </div>
-          <Tarjeta titulo="¿Cuándo escriben?" ayuda="Conversaciones iniciadas por día de la semana y hora (Colombia).">
-            <Grafico opcion={optCalor} alto={300} />
-          </Tarjeta>
+          <Restringido clave="chatbot.detalle" titulo="¿Cuándo escriben?" alto={300}>
+            <Tarjeta titulo="¿Cuándo escriben?" ayuda="Conversaciones iniciadas por día de la semana y hora (Colombia).">
+              <Grafico opcion={optCalor} alto={300} />
+            </Tarjeta>
+          </Restringido>
         </>
       )}
     </>

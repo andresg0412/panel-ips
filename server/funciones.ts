@@ -65,6 +65,8 @@ export const FUNCIONES: Funcion[] = [
   { clave: 'metas.editar', pagina: 'resumen', nivel: 'full', titulo: 'Definir las metas de los indicadores', roles: ['direccion'] },
 
   { clave: 'agenda.periodo', pagina: 'agenda', nivel: 'basico', titulo: 'Citas por estado, especialidad y profesional' },
+  // Recorte dentro de GET /api/agenda (nivel Básico): no es un endpoint propio, ver recortes.ts.
+  { clave: 'agenda.desglose', pagina: 'agenda', nivel: 'intermedio', titulo: 'Citas por convenio, tipo de servicio y día, origen de las cancelaciones y últimos cambios' },
   { clave: 'agenda.inasistencia', pagina: 'agenda', nivel: 'intermedio', titulo: 'Mapa de la inasistencia y anticipación de cancelaciones' },
   { clave: 'agenda.tendencias', pagina: 'agenda', nivel: 'intermedio', titulo: 'Tendencias: cancelación, teleconsulta, convenios y días de espera' },
   { clave: 'agenda.calidad', pagina: 'agenda', nivel: 'intermedio', titulo: 'Calidad de los datos de la agenda' },
@@ -105,6 +107,8 @@ export const FUNCIONES: Funcion[] = [
   { clave: 'profesionales.capacidad', pagina: 'profesionales', nivel: 'full', titulo: 'Cupos libres de los próximos 14 días y retención por profesional' },
 
   { clave: 'campanas.resultados', pagina: 'campanas', nivel: 'basico', titulo: 'Mensajes enviados y resultados por campaña' },
+  // Recorte dentro de GET /api/campanas (nivel Básico): lectura y respuesta de los pacientes.
+  { clave: 'campanas.respuesta', pagina: 'campanas', nivel: 'intermedio', titulo: 'Lectura y respuesta de los pacientes a cada campaña' },
   { clave: 'campanas.detalle', pagina: 'campanas', nivel: 'intermedio', titulo: 'Detalle de cada mensaje enviado' },
   { clave: 'campanas.calidad', pagina: 'campanas', nivel: 'intermedio', titulo: 'Errores de entrega y calidad de los teléfonos' },
   { clave: 'campanas.efecto', pagina: 'campanas', nivel: 'intermedio', titulo: 'Efecto de las campañas en la asistencia' },
@@ -114,6 +118,8 @@ export const FUNCIONES: Funcion[] = [
   { clave: 'campanas.fatiga', pagina: 'campanas', nivel: 'full', titulo: 'Fatiga de mensajes: quién recibe demasiados y si responde menos' },
 
   { clave: 'chatbot.conversaciones', pagina: 'chatbot', nivel: 'basico', titulo: 'Conversaciones con el asistente de WhatsApp' },
+  // Recorte dentro de GET /api/chatbot (nivel Básico): el Básico ve cuántas conversaciones hubo y qué lograron.
+  { clave: 'chatbot.detalle', pagina: 'chatbot', nivel: 'intermedio', titulo: 'Horas pico, conversión por trámite y motivos de cierre de las conversaciones' },
   { clave: 'chatbot.historia', pagina: 'chatbot', nivel: 'intermedio', titulo: 'Embudo de las conversaciones y trámites resueltos sin recepción' },
   { clave: 'chatbot.embudo', pagina: 'chatbot', nivel: 'intermedio', titulo: 'Recorrido paso a paso de cada trámite' },
   { clave: 'chatbot.ahorro', pagina: 'chatbot', nivel: 'full', titulo: 'Horas de recepción ahorradas por el bot' },
@@ -122,6 +128,8 @@ export const FUNCIONES: Funcion[] = [
   { clave: 'chatbot.demanda', pagina: 'chatbot', nivel: 'full', titulo: 'Demanda que el bot no convierte y mensajes no entendidos' },
 
   { clave: 'pacientes.panorama', pagina: 'pacientes', nivel: 'basico', titulo: 'Pacientes nuevos y recurrentes' },
+  // Recorte dentro de GET /api/pacientes/panorama (nivel Básico): tiempo entre citas y perfil.
+  { clave: 'pacientes.perfil', pagina: 'pacientes', nivel: 'intermedio', titulo: 'Tiempo entre citas y perfil de los pacientes atendidos' },
   { clave: 'pacientes.retencion', pagina: 'pacientes', nivel: 'intermedio', titulo: 'Retención, cohortes y pacientes en riesgo' },
   { clave: 'pacientes.buscar', pagina: 'pacientes', nivel: 'intermedio', titulo: 'Búsqueda y ficha de un paciente', roles: ['direccion', 'analista', 'relacion'] },
 

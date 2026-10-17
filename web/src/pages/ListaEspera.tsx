@@ -146,26 +146,32 @@ export default function ListaEspera({ rango }: { rango: Rango }) {
             titulo="En lista de espera ahora"
             ayuda="Foto de este momento (no depende del período elegido). Activa = inscripción vigente; esperando cupo = su cita sigue vigente y no tiene una oferta en curso."
           >
+            {/* El Básico ve solo el total de inscripciones activas, las que esperan cupo y las pausadas; el desglose es Intermedio
+                (el servidor ya vacía esas cifras, aquí se ocultan para no mostrar ceros que parezcan datos). */}
             <div className="cifras">
               <div className="cifra"><div className="n">{num(data.ahora.activas)}</div><div className="t">inscripciones activas</div></div>
               <div className="cifra"><div className="n">{num(data.ahora.esperando_cupo)}</div><div className="t">esperando un cupo</div></div>
-              <div className="cifra"><div className="n">{num(data.ahora.con_oferta_en_curso)}</div><div className="t">con una oferta en curso</div></div>
-              <div className="cifra"><div className="n">{num(data.ahora.sin_cita_elegible)}</div><div className="t">sin cita vigente (no reciben ofertas)</div></div>
+              {detalle && <div className="cifra"><div className="n">{num(data.ahora.con_oferta_en_curso)}</div><div className="t">con una oferta en curso</div></div>}
+              {detalle && <div className="cifra"><div className="n">{num(data.ahora.sin_cita_elegible)}</div><div className="t">sin cita vigente (no reciben ofertas)</div></div>}
               <div className="cifra"><div className="n">{num(data.ahora.pausadas)}</div><div className="t">pausadas</div></div>
-              <div className="cifra"><div className="n">{num(data.ahora.cupos_en_espera)}</div><div className="t">cupos esperando candidatos</div></div>
+              {detalle && <div className="cifra"><div className="n">{num(data.ahora.cupos_en_espera)}</div><div className="t">cupos esperando candidatos</div></div>}
             </div>
-            {data.pausadas.length > 0 && (
+            {detalle && (
               <>
-                <p className="ayuda" style={{ marginTop: 12 }}>Pausadas, por motivo:</p>
-                <ListaConteo items={lista(data.pausadas)} total={suma(data.pausadas)} />
+                {data.pausadas.length > 0 && (
+                  <>
+                    <p className="ayuda" style={{ marginTop: 12 }}>Pausadas, por motivo:</p>
+                    <ListaConteo items={lista(data.pausadas)} total={suma(data.pausadas)} />
+                  </>
+                )}
+                <div className="cifras" style={{ marginTop: 12 }}>
+                  {FLUJO.map((k) => (
+                    <div className="cifra" key={k}><div className="n">{num(de(data.flujoPeriodo, k))}</div><div className="t">{etiqueta(k).toLowerCase()} (período)</div></div>
+                  ))}
+                </div>
+                {data.flujoDiario.length > 0 && <Grafico opcion={optFlujo} alto={220} />}
               </>
             )}
-            <div className="cifras" style={{ marginTop: 12 }}>
-              {FLUJO.map((k) => (
-                <div className="cifra" key={k}><div className="n">{num(de(data.flujoPeriodo, k))}</div><div className="t">{etiqueta(k).toLowerCase()} (período)</div></div>
-              ))}
-            </div>
-            {data.flujoDiario.length > 0 && <Grafico opcion={optFlujo} alto={220} />}
           </Tarjeta>
           <div className="kpis">
             {detalle && (
@@ -178,7 +184,7 @@ export default function ListaEspera({ rango }: { rango: Rango }) {
             )}
             {invitaciones && <Kpi etiqueta="Invitaciones a inscribirse" actual={suma(data.invitaciones)} />}
           </div>
-          {!detalle && <Bloqueado clave="listaEspera.detalle" titulo="Cupos recuperados, ofertas y motivos" alto={260} />}
+          {!detalle && <Bloqueado clave="listaEspera.detalle" titulo="Movimiento de la lista, cupos recuperados, ofertas y motivos" alto={260} />}
           {detalle && (
           <>
           <div className="grid g2">
