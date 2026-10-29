@@ -34,6 +34,11 @@ function normalizarTelefono(v: string): string {
   return /^3\d{9}$/.test(d) ? `57${d}` : d;
 }
 
+/** ¿Este teléfono (3XXXXXXXXX o 573XXXXXXXXX) está oculto? Para quien sirve filas desde memoria sin pasar por query(). */
+export function telefonoOculto(telefono: string): boolean {
+  return actual.telefonos.includes(normalizarTelefono(telefono));
+}
+
 export function hayOcultos(): boolean {
   return actual.telefonos.length + actual.documentos.length + actual.pacientes.length > 0;
 }
@@ -103,6 +108,10 @@ const CONDICIONES: Record<string, (o: Ocultos) => (string | null)[]> = {
   'bi.fact_cita_estados': (o) => [fuera('agenda_id', o.citas)],
   'bi.fact_lista_espera': (o) => [fuera('paciente_id', o.pacientes), fuera('cita_actual_id', o.citas)],
   'bi.v_timeline_paciente': (o) => [fuera('telefono_norm', o.telefonos), fuera('paciente_id', o.pacientes), fuera('documento', o.documentos)],
+  // Historial de conversaciones (migración 045 del backend, esquema `historial`): texto de los mensajes. Un teléfono
+  // oculto (personal interno, kill switch, asesor, números de prueba) no aparece en ninguna lista ni conversación.
+  'historial.v_mensajes': (o) => [fuera('telefono_norm', o.telefonos)],
+  'historial.v_conversaciones': (o) => [fuera('telefono_norm', o.telefonos), fuera('pacientes_id', o.pacientes), fuera('numero_documento', o.documentos)],
   chat_stats: (o) => [fuera('telefono_norm', o.telefonos), fuera('id_usuario', o.idsUsuario), fuera('paciente_id', o.pacientes), fuera('documento', o.documentos), fuera('agenda_id', o.citas)],
   cupos_liberados: (o) => [fuera('cita_origen_id', o.citas), fuera('asignado_a_paciente_id', o.pacientes)],
   ofertas_cupo: (o) => [fuera('paciente_id', o.pacientes)],

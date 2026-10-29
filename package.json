@@ -12,6 +12,7 @@
     "build:web": "vite build --config web/vite.config.ts",
     "test:ux": "node scripts/test-ux.mjs",
     "test:niveles": "tsx scripts/test-niveles.mjs",
+    "test:conversaciones": "tsx scripts/test-conversaciones.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p web/tsconfig.json --noEmit",
     "start": "node dist/server/index.js"
   },

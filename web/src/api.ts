@@ -86,12 +86,13 @@ export function useConexion(): Conexion {
   return { ...conexion };
 }
 
-export async function getJson<T>(url: string): Promise<T> {
+export async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(url, { headers: cabeceras() });
+    res = await fetch(url, { headers: cabeceras(), signal });
   } catch (e) {
-    marcarConexion(false);
+    // Una petición cancelada a propósito (p. ej. al cambiar de conversación) no es una caída del servidor.
+    if ((e as Error)?.name !== 'AbortError') marcarConexion(false);
     throw e;
   }
   if (res.ok) marcarConexion(true);

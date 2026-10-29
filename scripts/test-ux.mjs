@@ -45,4 +45,23 @@ check('La barra de acciones es persistente al desplazarse', css.includes('.herra
 check('La primera columna de las tablas queda fija', css.includes('.tabla-wrap th:first-child, .tabla-wrap td:first-child'));
 check('Las pestañas bajan de línea en vez de mostrar barras de scroll', css.includes('.pestanas { display: flex; flex-wrap: wrap;') && !/\.pestanas \{[^}]*overflow/.test(css));
 
+const conversaciones = read('web/src/pages/Conversaciones.tsx');
+const servidorConv = read('server/routes/conversaciones.ts');
+const accesoSrv = read('server/acceso.ts');
+check('Conversaciones: la pantalla es de solo lectura (sin caja de texto, sin enviar ni pausar)', !/<textarea|type="text"|enviarJson|method: 'POST'|Enviar mensaje|Pausar el bot/i.test(conversaciones) && conversaciones.includes('Solo lectura: el panel no envía mensajes'));
+check('Conversaciones: el servidor solo expone GET y nunca llama al bot', !/app\.(post|put|delete|patch)\(/.test(servidorConv) && !/axios|fetch\(|BOT_URL|API_BACKEND_URL/.test(servidorConv));
+check('Conversaciones: sondeo cada 3 s (chat) y 10 s (lista), detenido con la pestaña oculta', conversaciones.includes('SONDEO_CHAT_MS = 3_000') && conversaciones.includes('SONDEO_LISTA_MS = 10_000') && conversaciones.includes("visibilityState !== 'visible'") && conversaciones.includes('visibilitychange'));
+check('Conversaciones: backoff ante errores y una petición a la vez con AbortController', conversaciones.includes('Math.min(30_000, baseMs * 2 ** fallos)') && conversaciones.includes('new AbortController()'));
+check('Conversaciones: indicador En vivo / Reconectando / En pausa', conversaciones.includes('En vivo') && conversaciones.includes('Reconectando') && conversaciones.includes('En pausa'));
+check('Conversaciones: botón flotante de mensajes nuevos en vez de saltar al final', conversaciones.includes('mensaje') && conversaciones.includes('conv-nuevos') && conversaciones.includes('estaAbajo()'));
+check('Conversaciones: carga de historial anterior conservando la posición', conversaciones.includes('antes_id') && conversaciones.includes('alturaPrevia'));
+check('Conversaciones: horas en America/Bogota', conversaciones.includes("BOGOTA = 'America/Bogota'"));
+check('Conversaciones: aviso legal con los días de conservación', conversaciones.includes('contienen datos personales y de salud') && conversaciones.includes('Su consulta queda registrada'));
+check('Conversaciones: plantillas solo con su nombre y multimedia como aviso', conversaciones.includes('Plantilla enviada:') && conversaciones.includes('no se almacena'));
+check('Conversaciones: la insignia de crisis aclara que no es atención de crisis', conversaciones.includes('no es una herramienta de atención de crisis'));
+check('Conversaciones: no usa el temporizador de 30 s de App.tsx ni SSE/WebSocket', !/EventSource|WebSocket/.test(conversaciones));
+check('Conversaciones: el menú la lista en Pacientes y comunicación y tiene icono', app.includes("'conversaciones', 'marketing'") && read('web/src/components/iconos.tsx').includes('conversaciones:'));
+check('Conversaciones: los sondeos exitosos no se registran en la actividad; la apertura sí', accesoSrv.includes('SIN_REGISTRO_SI_OK') && servidorConv.includes('Abrió la conversación'));
+check('Conversaciones: las identidades ocultas cubren las vistas del historial', read('server/ocultos.ts').includes("'historial.v_mensajes'") && read('server/ocultos.ts').includes("'historial.v_conversaciones'"));
+
 console.log(`UX smoke test: ${checks.length} comprobaciones OK`);

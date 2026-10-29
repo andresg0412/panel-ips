@@ -15,12 +15,12 @@ export const MAX_USUARIOS: Record<Nivel, number | null> = { basico: 1, intermedi
 
 export type Pagina =
   | 'resumen' | 'campanas' | 'agenda' | 'capacidad' | 'profesionales' | 'chatbot' | 'lista-espera' | 'pacientes' | 'marketing'
-  | 'alertas' | 'plan' | 'mi-agenda' | 'informe' | 'semanal' | 'inteligencia' | 'envios' | 'soporte';
+  | 'alertas' | 'plan' | 'mi-agenda' | 'informe' | 'semanal' | 'inteligencia' | 'envios' | 'conversaciones' | 'soporte';
 
 export type Rol = 'direccion' | 'operacion' | 'analista' | 'relacion' | 'profesional' | 'soporte';
 export const esRol = (v: unknown): v is Rol => typeof v === 'string' && v in ROLES;
 
-const CLIENTE: Pagina[] = ['resumen', 'informe', 'semanal', 'inteligencia', 'campanas', 'envios', 'agenda', 'capacidad', 'profesionales', 'chatbot', 'lista-espera', 'pacientes', 'marketing', 'alertas', 'plan'];
+const CLIENTE: Pagina[] = ['resumen', 'informe', 'semanal', 'inteligencia', 'campanas', 'envios', 'agenda', 'capacidad', 'profesionales', 'chatbot', 'lista-espera', 'pacientes', 'marketing', 'alertas', 'plan', 'conversaciones'];
 
 export const ROLES: Record<Rol, { nombre: string; inicio: Pagina; paginas: Pagina[] }> = {
   direccion: { nombre: 'Dirección', inicio: 'resumen', paginas: CLIENTE },
@@ -148,6 +148,18 @@ export const FUNCIONES: Funcion[] = [
     roles: ['direccion'],
   },
 
+  // Historial de conversaciones del chatbot (solo lectura, casi en tiempo real). Muestra el texto de los mensajes de
+  // los pacientes: solo Dirección (y Soporte), plan Full. Cada apertura de una conversación queda en la actividad.
+  // La página está en CLIENTE (el rol Analista la "tiene"), pero `roles` la deja solo a Dirección y Soporte.
+  // Diseño: proyecto-ips/docs/features/2026-10-29-historial-mensajes-panel.md, 6.2.
+  {
+    clave: 'conversaciones.ver',
+    pagina: 'conversaciones',
+    nivel: 'full',
+    titulo: 'Historial de conversaciones del chatbot en tiempo real (solo lectura)',
+    roles: ['direccion', 'soporte'],
+  },
+
   { clave: 'marketing.alcance', pagina: 'marketing', nivel: 'intermedio', titulo: 'Alcance de WhatsApp por mes' },
   { clave: 'marketing.segmentos', pagina: 'marketing', nivel: 'full', titulo: 'Segmentos de pacientes para invitar a volver' },
 
@@ -244,6 +256,10 @@ export const ENDPOINTS: Record<string, string> = {
   'GET /api/envios/invitacion/historial': 'envios.ver',
   'POST /api/envios/invitacion/ejecutar': 'envios.ejecutar',
   'GET /api/marketing': 'marketing.alcance',
+
+  'GET /api/conversaciones': 'conversaciones.ver',
+  'GET /api/conversaciones/cursor': 'conversaciones.ver',
+  'GET /api/conversaciones/:telefono/mensajes': 'conversaciones.ver',
 
   'GET /api/alertas/conteo': 'alertas.conteo',
   'GET /api/alertas': 'alertas.panel',

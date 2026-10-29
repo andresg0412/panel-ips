@@ -17,6 +17,7 @@ import Inteligencia from './pages/Inteligencia';
 import MiPlan from './pages/MiPlan';
 import Soporte from './pages/Soporte';
 import Envios from './pages/Envios';
+import Conversaciones from './pages/Conversaciones';
 import { IncidentesCtx, type Incidente } from './incidentes';
 import { AccesoCtx, Bloqueado, Candado, type Yo } from './acceso';
 import { fecha } from './format';
@@ -45,6 +46,7 @@ const PAGINAS: Pagina[] = [
   { ruta: 'mi-agenda', titulo: 'Mi agenda', desc: 'Sus próximas citas, sus pacientes y su horario', Comp: MiAgenda, conRango: true, funcion: 'miagenda.ver' },
   { ruta: 'profesionales', titulo: 'Profesionales', desc: 'Agenda, asistencia y continuidad de cada profesional', Comp: Profesionales, conRango: true, funcion: 'profesionales.lista' },
   { ruta: 'chatbot', titulo: 'Chatbot', desc: 'Conversaciones con el asistente de WhatsApp', Comp: Chatbot, conRango: true, funcion: 'chatbot.conversaciones' },
+  { ruta: 'conversaciones', titulo: 'Conversaciones', desc: 'Historial de mensajes del chatbot, casi en tiempo real (solo lectura)', Comp: Conversaciones, conRango: false, funcion: 'conversaciones.ver' },
   { ruta: 'lista-espera', titulo: 'Lista de espera', desc: 'Inscripciones, cupos liberados y ofertas', Comp: ListaEspera, conRango: true, funcion: 'listaEspera.inscritos' },
   { ruta: 'pacientes', titulo: 'Pacientes', desc: 'Quiénes son, cuántos llegan y cada cuánto vuelven', Comp: Pacientes, conRango: true, funcion: 'pacientes.panorama' },
   { ruta: 'marketing', titulo: 'Marketing', desc: 'Alcance de WhatsApp y pacientes para invitar a volver', Comp: Marketing, conRango: false, funcion: 'marketing.alcance' },
@@ -158,7 +160,7 @@ export default function App() {
 const GRUPOS: { clave: string; titulo: string; paginas: string[] }[] = [
   { clave: 'direccion', titulo: 'Ver el estado de la IPS', paginas: ['resumen', 'alertas', 'informe', 'semanal', 'inteligencia'] },
   { clave: 'operacion', titulo: 'Gestionar la operación', paginas: ['mi-agenda', 'agenda', 'capacidad', 'profesionales', 'lista-espera'] },
-  { clave: 'relacion', titulo: 'Pacientes y comunicación', paginas: ['pacientes', 'campanas', 'envios', 'chatbot', 'marketing'] },
+  { clave: 'relacion', titulo: 'Pacientes y comunicación', paginas: ['pacientes', 'campanas', 'envios', 'chatbot', 'conversaciones', 'marketing'] },
   { clave: 'cuenta', titulo: 'Cuenta y sistema', paginas: ['plan', 'soporte'] },
 ];
 

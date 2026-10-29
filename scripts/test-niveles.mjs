@@ -348,6 +348,41 @@ await cliente.alFinal();
   }
 }
 
+// Historial de conversaciones (proyecto-ips/docs/features/2026-10-29-historial-mensajes-panel.md, 6.2 y 8.3):
+// solo plan Full y solo Dirección (y Soporte). Se evalúa con el mismo `evaluar` y `estadoPaginas` que usa el servidor.
+{
+  const { FUNCIONES, ENDPOINTS, ROLES } = await import('../server/funciones.ts');
+  const { evaluar, estadoPaginas } = await import('../server/acceso.ts');
+  const ctx = (rol, nivel, extra = {}) => ({ usuario: 'prueba', rolReal: rol, nivelReal: nivel, rol, nivel, vistaPrevia: false, historialDesde: null, habilitado: true, ...extra });
+  const rutasConv = Object.entries(ENDPOINTS).filter(([, f]) => f === 'conversaciones.ver').map(([k]) => k);
+  check('Conversaciones: las 3 rutas del historial están mapeadas a conversaciones.ver', rutasConv.length === 3 && rutasConv.every((k) => k.startsWith('GET /api/conversaciones')));
+  const f = FUNCIONES.find((x) => x.clave === 'conversaciones.ver');
+  check('Conversaciones: función de nivel Full, página propia y solo roles direccion y soporte', f?.nivel === 'full' && f.pagina === 'conversaciones' && f.roles.length === 2 && f.roles.includes('direccion') && f.roles.includes('soporte'));
+  check('Conversaciones: la página existe en la lista de Dirección y Soporte', ROLES.direccion.paginas.includes('conversaciones') && ROLES.soporte.paginas.includes('conversaciones'));
+
+  for (const nivel of ['basico', 'intermedio']) {
+    const ev = evaluar(ctx('direccion', nivel), 'conversaciones.ver');
+    check(`Conversaciones: Dirección en ${nivel} → candado (402, plan Full)`, !ev.ok && ev.motivo === 'nivel' && ev.nivel === 'full');
+    const menu = estadoPaginas(ctx('direccion', nivel)).conversaciones;
+    check(`Conversaciones: en el menú de Dirección ${nivel} aparece con candado`, menu.estado === 'bloqueada' && menu.nivel === 'full');
+  }
+  check('Conversaciones: Dirección en Full → permitido', evaluar(ctx('direccion', 'full'), 'conversaciones.ver').ok);
+  check('Conversaciones: en el menú de Dirección Full aparece sin candado', estadoPaginas(ctx('direccion', 'full')).conversaciones.estado === 'ok');
+  for (const rol of ['relacion', 'analista', 'operacion', 'profesional']) {
+    for (const nivel of NIVELES) {
+      const ev = evaluar(ctx(rol, nivel), 'conversaciones.ver');
+      check(`Conversaciones: ${rol} en ${nivel} → 403 (el rol no la incluye)`, !ev.ok && ev.motivo === 'rol');
+    }
+    check(`Conversaciones: ${rol} no ve la entrada en el menú`, estadoPaginas(ctx(rol, 'full')).conversaciones.estado === 'oculta');
+  }
+  check('Conversaciones: Soporte en Full → permitido', evaluar(ctx('soporte', 'full'), 'conversaciones.ver').ok);
+  const vistaRelacion = ctx('soporte', 'full', { rol: 'relacion', vistaPrevia: true });
+  check('Conversaciones: Soporte en vista previa como Relación → 403 (la vista previa respeta el rol)', !evaluar(vistaRelacion, 'conversaciones.ver').ok);
+  const vistaIntermedio = ctx('soporte', 'full', { rol: 'direccion', nivel: 'intermedio', vistaPrevia: true });
+  check('Conversaciones: Soporte en vista previa Intermedio → candado', evaluar(vistaIntermedio, 'conversaciones.ver').motivo === 'nivel');
+  check('Conversaciones: no hay exportación del historial (ninguna función ni endpoint de CSV/descarga lo menciona)', !FUNCIONES.some((x) => x.clave.startsWith('conversaciones.') && x.clave !== 'conversaciones.ver') && !Object.keys(ENDPOINTS).some((k) => /conversaciones.*(exportar|csv|descargar)/i.test(k)));
+}
+
 for (const a of advertencias) console.warn(`  ⚠ ${a}`);
 console.log(`Niveles: ${comprobaciones.length} comprobaciones OK${advertencias.length ? ` (${advertencias.length} advertencias)` : ''}`);
 process.exit(0);
