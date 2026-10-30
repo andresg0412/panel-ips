@@ -46,6 +46,7 @@ await Q(`CREATE SCHEMA panel AUTHORIZATION panel_t_app`);
 
 process.env.DATABASE_URL = urlRol('panel_t_lectura');
 process.env.DATABASE_URL_APP = urlRol('panel_t_app');
+process.env.PANEL_CONVERSACIONES_ENABLED = 'true';
 process.env.PANEL_HISTORIAL_TICK_MS = '500';
 process.env.PANEL_HISTORIAL_INACTIVIDAD_MS = '3000';
 const OCULTO = '573009990000';

@@ -186,11 +186,16 @@ export interface Evaluacion {
   nivel: Nivel;
 }
 
+/** Historial de conversaciones encendido en ESTE panel (PANEL_CONVERSACIONES_ENABLED=true). Apagado, nadie salvo soporte lo ve. */
+export const conversacionesHabilitadas = () => process.env.PANEL_CONVERSACIONES_ENABLED === 'true';
+
 export function evaluar(ctx: Contexto, clave: string): Evaluacion {
   const f = funcion(clave);
   if (!f) return { ok: false, motivo: 'rol', nivel: 'full' };
-  // El soporte sin vista previa lo ve todo.
+  // El soporte sin vista previa lo ve todo (también lo que aún no está habilitado, para poder probarlo).
   if (ctx.rolReal === 'soporte' && !ctx.vistaPrevia) return { ok: true, nivel: f.nivel };
+  // Función aún no habilitada: se comporta como un rol sin acceso (la página no aparece en el menú y la API responde 403).
+  if (f.clave === 'conversaciones.ver' && !conversacionesHabilitadas()) return { ok: false, motivo: 'rol', nivel: f.nivel };
   const rol = ctx.rol;
   const rolOk = !!rol && (f.pagina === null || ROLES[rol].paginas.includes(f.pagina)) && (!f.roles || f.roles.includes(rol));
   if (!rolOk) return { ok: false, motivo: 'rol', nivel: f.nivel };

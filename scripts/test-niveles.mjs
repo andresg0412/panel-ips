@@ -348,6 +348,7 @@ await cliente.alFinal();
   }
 }
 
+process.env.PANEL_CONVERSACIONES_ENABLED = 'true';
 // Historial de conversaciones (proyecto-ips/docs/features/2026-10-29-historial-mensajes-panel.md, 6.2 y 8.3):
 // solo plan Full y solo Dirección (y Soporte). Se evalúa con el mismo `evaluar` y `estadoPaginas` que usa el servidor.
 {
@@ -380,6 +381,13 @@ await cliente.alFinal();
   check('Conversaciones: Soporte en vista previa como Relación → 403 (la vista previa respeta el rol)', !evaluar(vistaRelacion, 'conversaciones.ver').ok);
   const vistaIntermedio = ctx('soporte', 'full', { rol: 'direccion', nivel: 'intermedio', vistaPrevia: true });
   check('Conversaciones: Soporte en vista previa Intermedio → candado', evaluar(vistaIntermedio, 'conversaciones.ver').motivo === 'nivel');
+  process.env.PANEL_CONVERSACIONES_ENABLED = 'false';
+  const apagada = evaluar(ctx('direccion', 'full'), 'conversaciones.ver');
+  check('Conversaciones: con la bandera apagada Dirección Full no la ve (403 y sin entrada en el menú)', !apagada.ok && apagada.motivo === 'rol' && estadoPaginas(ctx('direccion', 'full')).conversaciones.estado === 'oculta');
+  check('Conversaciones: con la bandera apagada Soporte sí puede probarla', evaluar(ctx('soporte', 'full'), 'conversaciones.ver').ok);
+  delete process.env.PANEL_CONVERSACIONES_ENABLED;
+  check('Conversaciones: sin la variable definida queda apagada por defecto', !evaluar(ctx('direccion', 'full'), 'conversaciones.ver').ok);
+  process.env.PANEL_CONVERSACIONES_ENABLED = 'true';
   check('Conversaciones: no hay exportación del historial (ninguna función ni endpoint de CSV/descarga lo menciona)', !FUNCIONES.some((x) => x.clave.startsWith('conversaciones.') && x.clave !== 'conversaciones.ver') && !Object.keys(ENDPOINTS).some((k) => /conversaciones.*(exportar|csv|descargar)/i.test(k)));
 }
 
