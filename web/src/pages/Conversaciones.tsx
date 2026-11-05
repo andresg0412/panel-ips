@@ -337,11 +337,15 @@ function Chat({ telefono, aviso, onVolver, onLeido }: { telefono: string; aviso:
     setMensajes((actuales) => {
       const ids = new Set(actuales.map((m) => m.id));
       const nuevosMsgs = d.mensajes.filter((m) => !ids.has(m.id));
+      let cambioEstado = false;
       const conEstados = actuales.map((m) => {
         const e = estados.get(m.id);
-        return e && (e.estado_envio !== m.estado_envio || e.error_code !== m.error_code) ? { ...m, estado_envio: e.estado_envio, error_code: e.error_code } : m;
+        if (!e || (e.estado_envio === m.estado_envio && e.error_code === m.error_code)) return m;
+        cambioEstado = true;
+        return { ...m, estado_envio: e.estado_envio, error_code: e.error_code };
       });
-      if (!nuevosMsgs.length) return conEstados;
+      // Sin novedades se devuelve el mismo arreglo: un sondeo vacío no debe repintar ni mover el desplazamiento.
+      if (!nuevosMsgs.length) return cambioEstado ? conEstados : actuales;
       // Solo salta al final si la persona ya estaba abajo; si subió a leer, se avisa con el botón flotante.
       if (estaAbajo()) irAbajo.current = true;
       else {
@@ -375,7 +379,9 @@ function Chat({ telefono, aviso, onVolver, onLeido }: { telefono: string; aviso:
   };
 
   const alDesplazar = () => {
-    if (estaAbajo()) setNuevos(0);
+    // Si la persona sube a leer, ningún sondeo (ni un cambio de chulitos) la devuelve al final.
+    irAbajo.current = estaAbajo();
+    if (irAbajo.current) setNuevos(0);
     if ((caja.current?.scrollTop ?? 1) < 40) void cargarAnteriores();
   };
 
