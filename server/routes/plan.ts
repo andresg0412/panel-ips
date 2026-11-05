@@ -1,5 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { estadoPaginas, evaluar, obtenerConfig, registrarActividad } from '../acceso.js';
+import { modoAuth, tiposSesion } from '../auth/configuracion.js';
+import { aBogota } from '../auth/sesiones.js';
+import { queryApp } from '../db.js';
 import { FUNCIONES, HISTORIAL_DIAS, MAX_USUARIOS, NIVELES, NOMBRE_NIVEL, PROXIMAMENTE, ROLES } from '../funciones.js';
 
 export default async function rutasPlan(app: FastifyInstance) {
@@ -7,7 +10,26 @@ export default async function rutasPlan(app: FastifyInstance) {
   app.get('/api/yo', async (req) => {
     const ctx = req.contexto!;
     const rol = ctx.habilitado ? ctx.rol : null;
+    const modo = modoAuth();
+    const sesion = modo === 'sesion' ? req.sesionPanel ?? null : null;
+    const cuenta = ctx.usuario ? (await obtenerConfig()).usuarios.get(ctx.usuario) : undefined;
+    // "Último acceso": el inicio de sesión anterior al actual (el actual ya quedó registrado al entrar).
+    let ultimoAcceso: string | null = null;
+    if (sesion) {
+      const [f] = await queryApp<{ at: Date }>(
+        `SELECT at FROM panel.eventos_autenticacion WHERE usuario = $1 AND tipo = 'login_ok' ORDER BY at DESC OFFSET 1 LIMIT 1`,
+        [sesion.usuario],
+      );
+      ultimoAcceso = f ? aBogota(f.at.getTime()) : null;
+    }
     return {
+      autenticacion: modo,
+      debeCambiar: ctx.debeCambiar,
+      correo: cuenta?.correo ?? null,
+      ultimoAcceso,
+      sesion: sesion
+        ? { inactividadMin: tiposSesion(sesion.mantener).inactividadMs / 60_000, mantener: sesion.mantener, expiraAt: sesion.expiraAt }
+        : null,
       usuario: ctx.usuario,
       nombre: ctx.nombre,
       rol,

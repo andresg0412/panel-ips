@@ -14,13 +14,19 @@
 //     (cabeceras x-panel-vista-nivel y x-panel-vista-rol), así que PANEL_USUARIO debe ser un usuario con rol
 //     `soporte` en `panel.usuarios` (el panel necesita DATABASE_URL y DATABASE_URL_APP; sin DATABASE_URL_APP
 //     arranca en modo legado, donde todos son Dirección/Full y no existe vista previa).
-//        PANEL_URL=http://localhost:8100 PANEL_USUARIO=soporte npm run test:niveles
+//        PANEL_URL=http://localhost:8100 PANEL_COOKIE='panel_sesion=...' npm run test:niveles
+//     Con el login propio (PANEL_AUTH_MODO=sesion, el modo por defecto) PANEL_COOKIE es la cookie COMPLETA ("nombre=valor")
+//     de una sesión de soporte; se obtiene con `node dist/server/scripts/sesion-verificacion.js` o iniciando sesión en un
+//     navegador. Solo en la transición con nginx (PANEL_AUTH_MODO=nginx) se usa PANEL_USUARIO, que viaja en X-Remote-User.
 //     Con datos reales una lista puede venir vacía legítimamente: en vivo, eso en Intermedio/Full es una
 //     advertencia, no un fallo (lo que sí falla es que venga recortada, es decir, `null` o con la forma de Básico).
 import assert from 'node:assert/strict';
 
 const PANEL_URL = process.env.PANEL_URL?.replace(/\/$/, '') || null;
 const PANEL_USUARIO = process.env.PANEL_USUARIO || 'soporte';
+const PANEL_COOKIE = process.env.PANEL_COOKIE || null;
+/** Identidad en vivo: la cookie de sesión si se da; si no, la cabecera de la transición con nginx. */
+const identidad = () => (PANEL_COOKIE ? { cookie: PANEL_COOKIE } : { 'x-remote-user': PANEL_USUARIO });
 const EN_VIVO = !!PANEL_URL;
 
 const NIVELES = ['basico', 'intermedio', 'full'];
@@ -190,18 +196,18 @@ async function clienteLocal() {
 async function clienteEnVivo() {
   const pedir = async (ruta, nivel) => {
     const r = await fetch(`${PANEL_URL}${ruta}`, {
-      headers: { 'x-remote-user': PANEL_USUARIO, 'x-panel-vista-nivel': nivel, 'x-panel-vista-rol': 'direccion' },
+      headers: { ...identidad(), 'x-panel-vista-nivel': nivel, 'x-panel-vista-rol': 'direccion' },
     });
     return { status: r.status, body: r.status === 200 ? await r.json() : null };
   };
   // Un profesional que exista: la lista de profesionales es de nivel Básico.
   const lista = await pedir('/api/profesionales', 'full');
-  assert.equal(lista.status, 200, `GET /api/profesionales respondió ${lista.status}: ¿PANEL_USUARIO "${PANEL_USUARIO}" tiene rol soporte?`);
+  assert.equal(lista.status, 200, `GET /api/profesionales respondió ${lista.status}: ¿${PANEL_COOKIE ? 'la sesión de PANEL_COOKIE' : `PANEL_USUARIO "${PANEL_USUARIO}"`} es de rol soporte?`);
   const profesional = lista.body.filas?.[0]?.nombre;
   assert.ok(profesional, 'No hay profesionales para probar la ficha');
 
   return {
-    modo: `en vivo (${PANEL_URL}, usuario ${PANEL_USUARIO}, profesional "${profesional}")`,
+    modo: `en vivo (${PANEL_URL}, ${PANEL_COOKIE ? 'cookie de sesión' : `usuario ${PANEL_USUARIO}`}, profesional "${profesional}")`,
     async respuestas(nivel) {
       const out = {};
       for (const [clave, , ruta] of PRUEBAS) {

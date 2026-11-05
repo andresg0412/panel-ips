@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { enviarJson, getJson, useApi, type Rango } from '../api';
+import { ErrorApi, enviarJson, getJson, useApi, type Rango } from '../api';
 import { Kpi, ListaConteo, Tabla, Tarjeta, Estado, type Columna } from '../components/ui';
 import { useAcceso } from '../acceso';
+import VentanaReautenticar from '../components/VentanaReautenticar';
 import { fecha, fechaHora, hora, num } from '../format';
 
 // Envíos manuales: barrido de la campaña de invitación a la lista de espera. Primero "Consultar citas" muestra
@@ -131,6 +132,8 @@ export default function Envios(_: { rango: Rango }) {
   const [cantidad, setCantidad] = useState<number>(0);
   const [enviando, setEnviando] = useState(false);
   const [resultado, setResultado] = useState<{ ok: boolean; texto: string } | null>(null);
+  // Lanzar un envío a pacientes pide confirmar la contraseña si la última confirmación tiene más de 10 minutos (D6).
+  const [pideClave, setPideClave] = useState(false);
 
   // Tras enviar, y mientras haya un envío en curso, el historial se refresca cada 5 s. Los 20 s después del clic
   // cubren el rato en que el bot todavía no ha creado la ejecución.
@@ -159,13 +162,17 @@ export default function Envios(_: { rango: Rango }) {
     }
   };
 
-  const enviar = async () => {
+  const enviar = () => {
     if (!previa || cantidad < 1) return;
     const ok = window.confirm(
       `Se enviará la invitación a la lista de espera por WhatsApp a ${num(cantidad)} pacientes.\n\n` +
         'No se puede deshacer. ¿Desea continuar?',
     );
-    if (!ok) return;
+    if (ok) void lanzar();
+  };
+
+  const lanzar = async () => {
+    if (!previa || cantidad < 1) return;
     setEnviando(true);
     setResultado(null);
     try {
@@ -181,7 +188,9 @@ export default function Envios(_: { rango: Rango }) {
       setVigilarDesde(Date.now());
       setTimeout(() => hist.recargar(), 3_000);
     } catch (e) {
-      setResultado({ ok: false, texto: (e as Error).message });
+      // Falta confirmar la contraseña: se pide y, al confirmarla, el envío se reintenta solo.
+      if (e instanceof ErrorApi && e.codigo === 'reautenticar') setPideClave(true);
+      else setResultado({ ok: false, texto: (e as Error).message });
     } finally {
       setEnviando(false);
     }
@@ -204,6 +213,13 @@ export default function Envios(_: { rango: Rango }) {
 
   return (
     <>
+      {pideClave && (
+        <VentanaReautenticar
+          motivo="Por seguridad, antes de enviar mensajes a pacientes confirme su contraseña."
+          onConfirmada={() => (setPideClave(false), void lanzar())}
+          onCancelar={() => setPideClave(false)}
+        />
+      )}
       <Tarjeta
         titulo="Invitación a la lista de espera"
         ayuda="Invita por WhatsApp a pacientes con una cita futura a inscribirse en la lista de espera, para avisarles si se libera un cupo antes con su mismo profesional. Su cita no cambia. Primero consulte a quiénes se invitaría; después envíe."

@@ -4,10 +4,11 @@
 // Las alertas solo se ven en la consola de soporte; no se envían por correo ni por mensaje (decisión de German).
 import { pool, poolApp, query, queryApp, queryOne } from './db.js';
 import { erroresRecientes } from './acceso.js';
+import { RETENCION_DIAS, modoAuth } from './auth/configuracion.js';
 import { ENLACE_ALERTA, alertasActivas } from './routes/alertas.js';
 import { HOY } from './sql.js';
 
-export type Grupo = 'disponibilidad' | 'despliegue' | 'integraciones' | 'lista_espera' | 'panel';
+export type Grupo = 'disponibilidad' | 'despliegue' | 'integraciones' | 'lista_espera' | 'panel' | 'seguridad';
 
 export interface AlertaTecnica {
   clave: string;
@@ -303,6 +304,60 @@ const REGLAS: { nombre: string; grupo: Grupo; fn: Regla }[] = [
     },
   },
   {
+    // Login propio (solo en modo `sesion`): intentos fallidos masivos, cuentas bloqueadas, correo que no sale.
+    nombre: 'Seguridad de los accesos',
+    grupo: 'seguridad',
+    fn: async (out) => {
+      if (modoAuth() !== 'sesion') return;
+      const [r] = await queryApp<{ fallos: number; correo_fallido: number; sin_correo: number }>(
+        `SELECT (SELECT count(*) FROM panel.eventos_autenticacion WHERE tipo = 'login_fallido' AND at > now() - interval '15 minutes')::int AS fallos,
+                (SELECT count(*) FROM panel.eventos_autenticacion WHERE tipo = 'correo_fallido' AND at > now() - interval '1 hour')::int AS correo_fallido,
+                (SELECT count(*) FROM panel.usuarios WHERE activo AND correo IS NULL)::int AS sin_correo`,
+      );
+      const bloqueadas = await queryApp<{ usuario: string; n: number }>(
+        `SELECT usuario, count(*)::int AS n FROM panel.eventos_autenticacion
+          WHERE tipo = 'cuenta_bloqueada' AND usuario IS NOT NULL AND at > now() - interval '24 hours'
+          GROUP BY usuario HAVING count(*) >= 3`,
+      );
+      if (r.fallos >= 30) {
+        out.push({
+          clave: 'seguridad:fallos_login', grupo: 'seguridad', severidad: 'media',
+          titulo: `${r.fallos} intentos de acceso fallidos en 15 minutos`,
+          detalle: 'Contraseñas incorrectas o usuarios que no existen, desde cualquier IP.',
+          impacto: 'Puede ser un intento de adivinar contraseñas. Revise la pestaña Accesos de Soporte para ver desde qué IP y contra qué usuarios.',
+          enlace: '#/soporte',
+        });
+      }
+      if (bloqueadas.length) {
+        out.push({
+          clave: 'seguridad:bloqueos', grupo: 'seguridad', severidad: 'media',
+          titulo: `Cuentas bloqueadas varias veces en 24 horas: ${bloqueadas.map((b) => b.usuario).join(', ')}`,
+          detalle: bloqueadas.map((b) => `${b.usuario}: ${b.n} bloqueos`).join(' · '),
+          impacto: 'Alguien insiste en entrar a esas cuentas o la persona olvidó su contraseña. Genere una contraseña temporal o revise los accesos.',
+          enlace: '#/soporte',
+        });
+      }
+      if (r.correo_fallido > 0) {
+        out.push({
+          clave: 'seguridad:correo', grupo: 'seguridad', severidad: 'media',
+          titulo: 'Falló el envío de correos de seguridad en la última hora',
+          detalle: `${r.correo_fallido} correos (códigos de recuperación o avisos de cambio de contraseña) no salieron.`,
+          impacto: 'Las personas no pueden recuperar su contraseña por correo. Revise el proveedor (Resend) y la llave; mientras tanto, genere contraseñas temporales.',
+          enlace: '#/soporte',
+        });
+      }
+      if (r.sin_correo > 0) {
+        out.push({
+          clave: 'seguridad:sin_correo', grupo: 'seguridad', severidad: 'baja',
+          titulo: `${r.sin_correo} ${r.sin_correo === 1 ? 'usuario activo' : 'usuarios activos'} sin correo`,
+          detalle: 'Sin correo no pueden recuperar su contraseña ni recibir el aviso de cambio.',
+          impacto: 'Cargue el correo en Soporte, Usuarios.',
+          enlace: '#/soporte',
+        });
+      }
+    },
+  },
+  {
     nombre: 'Errores del panel',
     grupo: 'panel',
     fn: async (out) => {
@@ -409,12 +464,21 @@ export async function ejecutarVigilante(): Promise<void> {
   }
 }
 
-/** Limpieza diaria: actividad y alertas resueltas de más de 180 días. */
-async function limpiar() {
+/** Limpieza diaria: actividad y alertas resueltas de más de 180 días, y la retención del login propio. */
+export async function limpiar() {
   try {
     await queryApp(`DELETE FROM panel.actividad WHERE at < now() - interval '180 days'`);
     await queryApp(`DELETE FROM panel.alertas WHERE estado = 'resuelta' AND resuelta_at < now() - interval '180 days'`);
     await queryApp(`DELETE FROM panel.alertas_cliente_revisadas WHERE revisada_at < now() - interval '30 days'`);
+    // Login propio: sesiones cerradas o vencidas, códigos de recuperación y eventos, con su retención.
+    await queryApp(`DELETE FROM panel.sesiones WHERE coalesce(cerrada_at, expira_at) < now() - interval '${RETENCION_DIAS.sesiones} days'`);
+    await queryApp(`DELETE FROM panel.codigos_recuperacion WHERE creado_at < now() - interval '${RETENCION_DIAS.codigos} days'`);
+    await queryApp(`DELETE FROM panel.eventos_autenticacion WHERE at < now() - interval '${RETENCION_DIAS.eventos} days'`);
+    // Del historial de contraseñas solo se conservan las 3 más recientes de cada usuario.
+    await queryApp(
+      `DELETE FROM panel.contrasenas_previas WHERE id IN (
+         SELECT id FROM (SELECT id, row_number() OVER (PARTITION BY usuario ORDER BY at DESC, id DESC) AS pos FROM panel.contrasenas_previas) t WHERE pos > 3)`,
+    );
   } catch (e) {
     console.error('Vigilante: no se pudo limpiar el historial:', (e as Error).message);
   }

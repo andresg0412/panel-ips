@@ -30,6 +30,14 @@ export interface Yo {
   funciones: Record<string, Evaluacion>;
   niveles: Record<Nivel, string>;
   roles: Record<string, string>;
+  /** Cómo se autentica el panel: `sesion` (login propio) o `nginx` (solo la transición). */
+  autenticacion: 'sesion' | 'nginx';
+  /** La contraseña es temporal: hay que cambiarla antes de ver cualquier pantalla. */
+  debeCambiar: boolean;
+  correo: string | null;
+  /** Inicio de sesión anterior al actual, en hora de Bogotá (AAAA-MM-DDTHH:mm:ss). */
+  ultimoAcceso: string | null;
+  sesion: { inactividadMin: number; mantener: boolean; expiraAt: number } | null;
 }
 
 export const AccesoCtx = createContext<Yo | null>(null);

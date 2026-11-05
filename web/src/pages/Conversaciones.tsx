@@ -331,7 +331,7 @@ function Chat({ telefono, aviso, onVolver, onLeido }: { telefono: string; aviso:
 
   const sondear = useCallback(async (signal: AbortSignal) => {
     if (!cargado) return;
-    const d = await getJson<Nuevos>(`/api/conversaciones/${telefono}/mensajes?despues_id=${cursor.current}`, signal);
+    const d = await getJson<Nuevos>(`/api/conversaciones/${telefono}/mensajes?despues_id=${cursor.current}`, signal, { sondeo: true });
     cursor.current = Math.max(cursor.current, d.max_id);
     const estados = new Map(d.estados.map((e) => [e.id, e]));
     setMensajes((actuales) => {
@@ -459,11 +459,11 @@ export default function Conversaciones(_props: { rango: Rango }) {
     return () => clearInterval(t);
   }, []);
 
-  const cargarLista = useCallback(async (signal?: AbortSignal) => {
+  const cargarLista = useCallback(async (signal?: AbortSignal, sondeo = false) => {
     const q = new URLSearchParams();
     if (filtro) q.set('filtro', filtro);
     if (buscar) q.set('buscar', buscar);
-    const d = await getJson<Lista>(`/api/conversaciones${q.toString() ? `?${q}` : ''}`, signal);
+    const d = await getJson<Lista>(`/api/conversaciones${q.toString() ? `?${q}` : ''}`, signal, { sondeo });
     maxId.current = d.max_id;
     desfase.current = new Date(d.ahora).getTime() - Date.now();
     setLista(d);
@@ -484,8 +484,8 @@ export default function Conversaciones(_props: { rango: Rango }) {
 
   // Cada 10 s: ¿cambió algo? (consulta barata al buffer del servidor) y solo entonces se vuelve a pedir la lista.
   const sondearLista = useCallback(async (signal: AbortSignal) => {
-    const c = await getJson<{ max_id: number; completo: boolean }>(`/api/conversaciones/cursor?desde_id=${maxId.current}`, signal);
-    if (!c.completo || c.max_id > maxId.current) await cargarLista(signal);
+    const c = await getJson<{ max_id: number; completo: boolean }>(`/api/conversaciones/cursor?desde_id=${maxId.current}`, signal, { sondeo: true });
+    if (!c.completo || c.max_id > maxId.current) await cargarLista(signal, true);
   }, [cargarLista]);
   const estadoLista = useSondeo(sondearLista, SONDEO_LISTA_MS, !!lista, `${filtro}|${buscar}`);
 

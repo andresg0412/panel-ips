@@ -168,6 +168,78 @@ const MIGRACIONES: { nombre: string; sql: string }[] = [
       );
     `,
   },
+  {
+    // Login propio: credenciales, sesiones, códigos de recuperación y eventos de autenticación.
+    // Especificación: proyecto-ips/docs/features/2026-11-04-panel-login-autenticacion.md, sección 9.
+    // panel_lectura NO recibe permisos sobre estas tablas (no tiene USAGE sobre el esquema panel).
+    nombre: '007_autenticacion',
+    sql: `
+      -- Producción no tiene correos duplicados (verificado el 2026-11-04).
+      CREATE UNIQUE INDEX uq_usuarios_correo ON panel.usuarios (lower(correo)) WHERE correo IS NOT NULL;
+
+      CREATE TABLE panel.credenciales (
+        usuario text PRIMARY KEY REFERENCES panel.usuarios (usuario) ON UPDATE CASCADE,
+        hash text NOT NULL,
+        debe_cambiar boolean NOT NULL DEFAULT true,
+        temporal_expira_at timestamptz,
+        cambiada_at timestamptz NOT NULL DEFAULT now()
+      );
+
+      CREATE TABLE panel.contrasenas_previas (
+        id bigserial PRIMARY KEY,
+        usuario text NOT NULL REFERENCES panel.usuarios (usuario) ON UPDATE CASCADE,
+        hash text NOT NULL,
+        at timestamptz NOT NULL DEFAULT now()
+      );
+      CREATE INDEX ix_previas_usuario ON panel.contrasenas_previas (usuario, at DESC);
+
+      CREATE TABLE panel.sesiones (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),  -- identifica la sesión en "Mis sesiones"; nunca es el token
+        token_hash bytea NOT NULL UNIQUE,
+        usuario text NOT NULL REFERENCES panel.usuarios (usuario) ON UPDATE CASCADE,
+        mantener boolean NOT NULL DEFAULT false,
+        creada_at timestamptz NOT NULL DEFAULT now(),
+        ultima_actividad_at timestamptz NOT NULL DEFAULT now(),
+        expira_at timestamptz NOT NULL,
+        reautenticada_at timestamptz NOT NULL DEFAULT now(),
+        ip inet,
+        agente text,
+        cerrada_at timestamptz,
+        motivo_cierre text
+      );
+      CREATE INDEX ix_sesiones_usuario_activas ON panel.sesiones (usuario) WHERE cerrada_at IS NULL;
+
+      CREATE TABLE panel.codigos_recuperacion (
+        id bigserial PRIMARY KEY,
+        usuario text NOT NULL REFERENCES panel.usuarios (usuario) ON UPDATE CASCADE,
+        codigo_hmac bytea NOT NULL,
+        creado_at timestamptz NOT NULL DEFAULT now(),
+        expira_at timestamptz NOT NULL,
+        intentos integer NOT NULL DEFAULT 0,
+        usado_at timestamptz,
+        anulado_at timestamptz,
+        token_hash bytea,
+        token_expira_at timestamptz,
+        token_usado_at timestamptz,
+        ip inet
+      );
+      CREATE INDEX ix_codigos_usuario ON panel.codigos_recuperacion (usuario, creado_at DESC);
+      CREATE UNIQUE INDEX uq_codigos_token ON panel.codigos_recuperacion (token_hash) WHERE token_hash IS NOT NULL;
+
+      CREATE TABLE panel.eventos_autenticacion (
+        id bigserial PRIMARY KEY,
+        at timestamptz NOT NULL DEFAULT now(),
+        tipo text NOT NULL,
+        usuario text,          -- sin FK: debe sobrevivir a cualquier cambio del usuario
+        actor text,            -- quién lo hizo si no fue la propia persona: soporte o consola
+        ip inet,
+        agente text,
+        detalle text
+      );
+      CREATE INDEX ix_eventos_auth_at ON panel.eventos_autenticacion (at DESC);
+      CREATE INDEX ix_eventos_auth_usuario ON panel.eventos_autenticacion (usuario, at DESC);
+    `,
+  },
 ];
 
 /** Configuración inicial (solo si no existe): nivel Full y los usuarios que ya tiene nginx, con su rol. */
