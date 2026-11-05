@@ -78,7 +78,7 @@ const FALLO_DIARIO = `
  * A6 más de 10 eventos de error del bot en el día.
  */
 export async function alertasActivas(): Promise<Alerta[]> {
-  const [ahora, ejecHoy, fallos, agenda, sesiones, errores, eventosCascada, cuposEscalados] = await Promise.all([
+  const [ahora, ejecHoy, fallos, agenda, sesiones, errores, eventosCascada, cuposEscalados, control] = await Promise.all([
     queryOne<{ hoy: string; hora: string; dow: number; festivo: boolean }>(
       `SELECT ${HOY}::text AS hoy, to_char(now() AT TIME ZONE 'America/Bogota', 'HH24:MI') AS hora,
               extract(isodow FROM now() AT TIME ZONE 'America/Bogota')::int AS dow,
@@ -137,6 +137,13 @@ export async function alertasActivas(): Promise<Alerta[]> {
       // pero el resto debe seguir funcionando.
       console.error('Alertas de cupos escalados no disponibles:', error?.message ?? error);
       return [];
+    }),
+    // La vista llega con la migración 047 del backend; sin ella no hay esta alerta.
+    queryOne<{ cascada_activa: boolean; cambiado_por: string | null; cambiado_at: string; cupos_en_curso: number }>(
+      `SELECT cascada_activa, cambiado_por, cambiado_at, cupos_en_curso FROM bi.v_control_lista_espera`,
+    ).catch((error) => {
+      console.error('Estado de la lista de espera no disponible:', error?.message ?? error);
+      return null;
     }),
   ]);
 
@@ -229,6 +236,15 @@ export async function alertasActivas(): Promise<Alerta[]> {
       severidad: 'alta',
       titulo: `Cupo pendiente de recepción: ${c.fecha_cita} ${c.hora_cita} · ${c.profesional}`,
       detalle: `Motivo: ${motivosCierre[c.motivo_cierre ?? ''] ?? c.motivo_cierre ?? 'sin detalle'}. ${c.ofertas} ofertas enviadas. Escalado desde ${c.escalado_desde}.`,
+    });
+  }
+  if (control && !control.cascada_activa) {
+    alertas.push({
+      alerta: 'lista_espera_cascada',
+      instancia: `lista_detenida:${control.cambiado_at}`,
+      severidad: 'alta',
+      titulo: 'La lista de espera está detenida',
+      detalle: `Detenida por ${control.cambiado_por ?? 'sin dato'} desde ${control.cambiado_at}. No se ofrecen cupos. Cupos en espera de reanudar: ${control.cupos_en_curso}.`,
     });
   }
   return alertas.sort((a, b) => (a.severidad === b.severidad ? 0 : a.severidad === 'alta' ? -1 : 1));

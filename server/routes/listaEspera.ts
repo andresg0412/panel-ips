@@ -1,13 +1,72 @@
 import type { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { HOY } from '../sql.js';
-import { conCache } from '../cache.js';
-import { claveCache } from '../acceso.js';
+import { conCache, olvidarCache } from '../cache.js';
+import { claveCache, registrarActividad } from '../acceso.js';
 import { leerRango } from '../params.js';
 
 // Tablas de public con SELECT explícito para panel_lectura (ver deploy/crear-rol.sql):
 // lista_espera, cupos_liberados, ofertas_cupo, invitaciones_lista_espera, ejecuciones_invitacion_lista_espera.
+//
+// Detener la lista de espera y anular un cupo son las únicas escrituras: el panel no toca esas tablas, le pide el
+// cambio al backend, que aplica los bloqueos de la cascada. La red interna del droplet llega al backend por su contenedor.
+const BACKEND_URL = (process.env.PANEL_BACKEND_URL ?? 'http://ips-centro-orientacion-backend-1:8000').replace(/\/+$/, '');
+const RUTA_CONTROL = '/api/chatbot/listaespera/control';
+
+/** Devuelve el status y el mensaje que da el backend; solo los 4xx traen un mensaje apto para la persona. */
+async function llamarBackend(ruta: string, cuerpo: Record<string, unknown>): Promise<{ status: number; body: Record<string, any> }> {
+  try {
+    const res = await fetch(`${BACKEND_URL}${ruta}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'x-control-token': process.env.PANEL_CONTROL_TOKEN ?? '' },
+      body: JSON.stringify(cuerpo),
+      signal: AbortSignal.timeout(15_000),
+    });
+    return { status: res.status, body: (await res.json().catch(() => ({}))) as Record<string, any> };
+  } catch (e) {
+    console.error('Lista de espera: no se pudo contactar al backend:', (e as Error).message);
+    return { status: 502, body: {} };
+  }
+}
+
+const NO_APLICADO = 'No se pudo aplicar el cambio en este momento. Intente de nuevo; si persiste, avise a soporte.';
+
 export default async function rutasListaEspera(app: FastifyInstance) {
+  app.post(
+    '/api/lista-espera/control',
+    { schema: { body: { type: 'object', required: ['activa'], additionalProperties: false, properties: { activa: { type: 'boolean' } } } } },
+    async (req, reply) => {
+      const { activa } = req.body as { activa: boolean };
+      const r = await llamarBackend(RUTA_CONTROL, { activa, usuario: req.contexto?.usuario ?? 'panel' });
+      if (r.status !== 200) {
+        req.log.warn({ status: r.status, causa: r.body?.cause }, 'cambio de estado de la lista de espera fallido');
+        return reply.code(502).send({ error: NO_APLICADO });
+      }
+      olvidarCache('/api/lista-espera');
+      olvidarCache('alertas');
+      registrarActividad(req.contexto, { tipo: 'configuracion', ruta: 'lista_espera', detalle: activa ? 'reanudada' : 'detenida', status: 200, ms: null });
+      return { cascada_activa: activa, cupos_descartados: r.body?.data?.cupos_descartados ?? 0 };
+    },
+  );
+
+  app.post(
+    '/api/lista-espera/cupos/:id/anular',
+    { schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string', minLength: 1, maxLength: 8 } } } } },
+    async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const r = await llamarBackend(`${RUTA_CONTROL}/cupo/anular`, { cupo_liberado_id: id, usuario: req.contexto?.usuario ?? 'panel' });
+      if (r.status !== 200) {
+        req.log.warn({ status: r.status, causa: r.body?.cause }, 'anulación de cupo fallida');
+        const conMensaje = r.status === 404 || r.status === 409;
+        return reply.code(conMensaje ? r.status : 502).send({ error: conMensaje && r.body?.message ? r.body.message : NO_APLICADO });
+      }
+      olvidarCache('/api/lista-espera');
+      olvidarCache('alertas');
+      registrarActividad(req.contexto, { tipo: 'configuracion', ruta: 'lista_espera', detalle: `cupo ${id} anulado`, status: 200, ms: null });
+      return { estado: 'cerrado_manual' };
+    },
+  );
+
   app.get('/api/lista-espera', async (req) => {
     const r = leerRango(req.query as Record<string, unknown>);
     const p = [r.desde, r.hasta];
@@ -21,8 +80,11 @@ export default async function rutasListaEspera(app: FastifyInstance) {
           console.error('Lista de espera: sección no disponible:', error?.message ?? error);
           return vacio;
         });
+      // Se puede anular mientras el cupo esté vivo y su franja no haya pasado. Esos cupos se listan siempre, aunque se
+      // hayan detectado fuera del período elegido: de lo contrario no habría cómo detener su envío.
+      const anulable = `c.estado IN ('detectado', 'en_oferta', 'escalado') AND (c.fecha_cita + c.hora_cita) > (now() AT TIME ZONE 'America/Bogota')`;
       const [inscripcionesHoy, inscripciones, cupos, ofertas, invitaciones, cuposRecientes, ofertasRecientes, ejecuciones, embudo, motivos, invitacionesPorTipo,
-        ahora, pausadas, flujoPeriodo, flujoDiario, respuesta] =
+        ahora, pausadas, flujoPeriodo, flujoDiario, respuesta, control] =
         await Promise.all([
           query(`SELECT estado AS clave, count(*) AS n FROM lista_espera GROUP BY 1 ORDER BY 2 DESC`),
           query(
@@ -44,14 +106,14 @@ export default async function rutasListaEspera(app: FastifyInstance) {
             p,
           ),
           query(
-            `SELECT ${bog('c.detectado_at')} AS detectado, c.fecha_cita, c.hora_cita, c.estado, c.origen_deteccion,
+            `SELECT c.cupo_liberado_id, ${bog('c.detectado_at')} AS detectado, c.fecha_cita, c.hora_cita, c.estado, c.origen_deteccion,
                     c.motivo_cierre, c.nivel_cascada_origen, pr.nombre_completo AS profesional, pr.especialidad,
-                    pa.nombre_completo AS asignado_a, ${bog('c.asignado_at')} AS asignado
+                    pa.nombre_completo AS asignado_a, ${bog('c.asignado_at')} AS asignado, (${anulable}) AS anulable
                FROM cupos_liberados c
                LEFT JOIN bi.dim_profesional pr ON pr.profesional_id = c.profesional_id
                LEFT JOIN bi.dim_paciente pa ON pa.paciente_id = c.asignado_a_paciente_id
-              WHERE ${enRango(bog('c.detectado_at'))}
-              ORDER BY c.detectado_at DESC LIMIT 100`,
+              WHERE ${enRango(bog('c.detectado_at'))} OR (${anulable})
+              ORDER BY (${anulable}) DESC, c.detectado_at DESC LIMIT 100`,
             p,
           ),
           query(
@@ -76,7 +138,8 @@ export default async function rutasListaEspera(app: FastifyInstance) {
           // LE-01 y LE-02: cupos liberados → con oferta → aceptados → asignados → la cita recolocada se atendió;
           // horas de consulta recuperadas y tiempo hasta recolocar.
           queryOne(
-            `WITH cu AS (SELECT * FROM cupos_liberados WHERE ${enRango(bog('detectado_at'))})
+            // Un cupo anulado nunca fue un espacio real: no cuenta como liberado ni como perdido.
+            `WITH cu AS (SELECT * FROM cupos_liberados WHERE ${enRango(bog('detectado_at'))} AND estado <> 'cerrado_manual')
              SELECT count(*) AS cupos,
                     count(*) FILTER (WHERE EXISTS (SELECT 1 FROM ofertas_cupo o WHERE o.cupo_liberado_id = cu.cupo_liberado_id
                                                      AND o.enviada_at IS NOT NULL)) AS con_oferta,
@@ -97,7 +160,7 @@ export default async function rutasListaEspera(app: FastifyInstance) {
           query(
             `SELECT coalesce(motivo_cierre, estado) AS clave, count(*) AS n
                FROM cupos_liberados
-              WHERE ${enRango(bog('detectado_at'))} AND estado <> 'asignado'
+              WHERE ${enRango(bog('detectado_at'))} AND estado NOT IN ('asignado', 'cerrado_manual')
               GROUP BY 1 ORDER BY 2 DESC`,
             p,
           ),
@@ -184,10 +247,12 @@ export default async function rutasListaEspera(app: FastifyInstance) {
                FROM o`,
             p,
           ),
+          // Sin la migración 047 del backend no hay estado que mostrar y el botón no aparece.
+          opcional(queryOne(`SELECT cascada_activa, cambiado_por, cambiado_at, cupos_en_curso FROM bi.v_control_lista_espera`), null),
         ]);
       return {
         rango: r, inscripcionesHoy, inscripciones, cupos, ofertas, invitaciones, cuposRecientes, ofertasRecientes, ejecuciones, embudo, motivos,
-        invitacionesPorTipo, ahora, pausadas, flujoPeriodo, flujoDiario, respuesta,
+        invitacionesPorTipo, ahora, pausadas, flujoPeriodo, flujoDiario, respuesta, control,
       };
     });
   });

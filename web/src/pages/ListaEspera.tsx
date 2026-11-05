@@ -1,5 +1,5 @@
-import { useCallback } from 'react';
-import { conRango, useApi, type Rango } from '../api';
+import { useCallback, useMemo, useState } from 'react';
+import { conRango, enviarJson, useApi, type Rango } from '../api';
 import Grafico from '../components/Grafico';
 import { barrasApiladas, embudo, pivotar } from '../components/series';
 import { Estado, Kpi, ListaConteo, Tabla, Tarjeta, type Columna } from '../components/ui';
@@ -8,6 +8,8 @@ import { Bloqueado, Restringido, useAcceso } from '../acceso';
 
 type Conteo = { clave: string; n: number };
 interface Cupo {
+  cupo_liberado_id: string;
+  anulable: boolean;
   detectado: string;
   fecha_cita: string;
   hora_cita: string;
@@ -52,7 +54,14 @@ interface Respuesta {
   minutos_a_leer: number | null;
   minutos_a_responder: number | null;
 }
+interface Control {
+  cascada_activa: boolean;
+  cambiado_por: string | null;
+  cambiado_at: string;
+  cupos_en_curso: number;
+}
 interface Datos {
+  control: Control | null;
   ahora: Ahora;
   pausadas: Conteo[];
   flujoPeriodo: Conteo[];
@@ -114,11 +123,76 @@ const COLS_EJEC: Columna<Ejecucion>[] = [
   { clave: 'estado', titulo: 'Estado', formato: etiqueta, csv: etiqueta },
 ];
 
+function citaDeCupo(c: Cupo) {
+  return `${fecha(c.fecha_cita)} ${hora(c.hora_cita)}${c.profesional ? ` · ${c.profesional}` : ''}`;
+}
+
 export default function ListaEspera({ rango }: { rango: Rango }) {
-  const { data, error, cargando } = useApi<Datos>(conRango('/api/lista-espera', rango), 60_000);
+  const { data, error, cargando, recargar } = useApi<Datos>(conRango('/api/lista-espera', rango), 60_000);
   const { puede } = useAcceso();
   const detalle = puede('listaEspera.detalle');
   const invitaciones = puede('listaEspera.invitaciones');
+  const puedeAnular = puede('listaEspera.anular');
+  const puedeControlar = puede('listaEspera.control');
+  const [enCurso, setEnCurso] = useState<string | null>(null);
+  const [errorAccion, setErrorAccion] = useState<{ clave: string; mensaje: string } | null>(null);
+
+  const accion = useCallback(
+    async (clave: string, url: string, cuerpo?: unknown) => {
+      setEnCurso(clave);
+      setErrorAccion(null);
+      try {
+        await enviarJson('POST', url, cuerpo);
+      } catch (e) {
+        setErrorAccion({ clave, mensaje: (e as Error).message });
+      } finally {
+        setEnCurso(null);
+        recargar(); // también tras un error: la fila pudo cambiar de estado mientras tanto
+      }
+    },
+    [recargar],
+  );
+
+  const anularCupo = useCallback(
+    (c: Cupo) => {
+      const ok = window.confirm(
+        `¿Anular el cupo del ${citaDeCupo(c)}?\n\nNo se ofrecerá a ningún paciente y las ofertas en curso dejarán de valer. Esta acción no se puede deshacer.`,
+      );
+      if (ok) void accion(c.cupo_liberado_id, `/api/lista-espera/cupos/${encodeURIComponent(c.cupo_liberado_id)}/anular`);
+    },
+    [accion],
+  );
+
+  const cambiarControl = useCallback(
+    (activa: boolean) => {
+      const ok = window.confirm(
+        activa
+          ? '¿Reanudar la lista de espera?\n\nLos cupos que sigan pendientes se empezarán a ofrecer. Si alguno no debe ofrecerse, anúlelo antes.'
+          : '¿Detener la lista de espera?\n\nNo se ofrecerán cupos y nadie podrá aceptar una oferta hasta que se reanude.',
+      );
+      if (ok) void accion('control', '/api/lista-espera/control', { activa });
+    },
+    [accion],
+  );
+
+  const colsCupo = useMemo<Columna<Cupo>[]>(() => {
+    if (!puedeAnular) return COLS_CUPO;
+    return [
+      ...COLS_CUPO,
+      {
+        clave: 'cupo_liberado_id',
+        titulo: 'Acción',
+        sinCsv: true,
+        orden: (c) => (c.anulable ? 0 : 1),
+        formato: (_v, c) =>
+          c.anulable ? (
+            <button className="boton" disabled={enCurso !== null} onClick={() => anularCupo(c)}>
+              {enCurso === c.cupo_liberado_id ? 'Anulando…' : 'Anular'}
+            </button>
+          ) : null,
+      },
+    ];
+  }, [puedeAnular, enCurso, anularCupo]);
 
   const optEmbudo = useCallback(() => {
     const e = data!.embudo;
@@ -140,6 +214,23 @@ export default function ListaEspera({ rango }: { rango: Rango }) {
   return (
     <>
       <Estado cargando={cargando} error={error} hayDatos={!!data} />
+      {data?.control && puedeControlar && (
+        <Tarjeta
+          titulo={data.control.cascada_activa ? 'Lista de espera en funcionamiento' : 'Lista de espera detenida'}
+          ayuda={
+            data.control.cascada_activa
+              ? 'Detenerla frena todas las ofertas de cupos al instante, por ejemplo si se está desocupando la agenda de un profesional.'
+              : `Detenida por ${data.control.cambiado_por ?? 'sin dato'} desde ${data.control.cambiado_at}. Los cupos liberados se siguen registrando. Cupos en espera de reanudar: ${num(data.control.cupos_en_curso)}.`
+          }
+          accion={
+            <button className="boton" disabled={enCurso !== null} onClick={() => cambiarControl(!data.control!.cascada_activa)}>
+              {enCurso === 'control' ? 'Aplicando…' : data.control.cascada_activa ? 'Detener lista de espera' : 'Reanudar lista de espera'}
+            </button>
+          }
+        >
+          {errorAccion?.clave === 'control' && <p className="ayuda" role="alert">{errorAccion.mensaje}</p>}
+        </Tarjeta>
+      )}
       {data && (
         <>
           <Tarjeta
@@ -230,8 +321,12 @@ export default function ListaEspera({ rango }: { rango: Rango }) {
               <ListaConteo items={lista(data.ofertas)} total={suma(data.ofertas)} />
             </Tarjeta>
           </div>
-          <Tarjeta titulo="Cupos liberados recientes">
-            <Tabla filas={data.cuposRecientes} columnas={COLS_CUPO} nombreCsv="cupos_liberados" />
+          <Tarjeta
+            titulo="Cupos liberados recientes"
+            ayuda={puedeAnular ? 'Los cupos que todavía se pueden anular aparecen primero, aunque se hayan liberado antes del período elegido.' : undefined}
+          >
+            {errorAccion && errorAccion.clave !== 'control' && <p className="ayuda" role="alert">{errorAccion.mensaje}</p>}
+            <Tabla filas={data.cuposRecientes} columnas={colsCupo} nombreCsv="cupos_liberados" />
           </Tarjeta>
           <Tarjeta titulo="Ofertas recientes">
             <Tabla filas={data.ofertasRecientes} columnas={COLS_OFERTA} nombreCsv="ofertas_cupo" />

@@ -231,7 +231,11 @@ const REGLAS: { nombre: string; grupo: Grupo; fn: Regla }[] = [
            (SELECT count(*) FROM ejecuciones_invitacion_lista_espera, ahora WHERE estado = 'abortada' AND iniciada_at > ahora.t - interval '24 hours') AS inv_abortadas,
            (SELECT count(*) FROM ejecuciones_invitacion_lista_espera, ahora WHERE estado = 'en_curso' AND iniciada_at < ahora.t - interval '2 hours') AS inv_colgadas`,
       );
-      if (r.vencidas > 0) {
+      // Detenida a propósito, nadie cierra ofertas ni avanza cupos: esos dos avisos serían falsas alarmas. Sin la
+      // migración 047 no hay bandera y se revisa como siempre. La pantalla de Alertas ya informa que está detenida.
+      const control = await queryOne<{ cascada_activa: boolean }>(`SELECT cascada_activa FROM bi.v_control_lista_espera`).catch(() => null);
+      const detenida = control?.cascada_activa === false;
+      if (r.vencidas > 0 && !detenida) {
         out.push({
           clave: 'lista_espera:ofertas_vencidas', grupo: 'lista_espera', severidad: 'media',
           titulo: `${r.vencidas} ofertas de cupo vencidas siguen como "enviada"`,
@@ -240,7 +244,7 @@ const REGLAS: { nombre: string; grupo: Grupo; fn: Regla }[] = [
           enlace: '#/lista-espera',
         });
       }
-      if (r.cupos_huerfanos > 0) {
+      if (r.cupos_huerfanos > 0 && !detenida) {
         out.push({
           clave: 'lista_espera:cupos_huerfanos', grupo: 'lista_espera', severidad: 'media',
           titulo: `${r.cupos_huerfanos} cupos "en oferta" sin ninguna oferta viva`,
