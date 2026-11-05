@@ -136,6 +136,15 @@ export const FUNCIONES: Funcion[] = [
   { clave: 'listaEspera.inscritos', pagina: 'lista-espera', nivel: 'basico', titulo: 'Inscritos activos en la lista de espera' },
   { clave: 'listaEspera.detalle', pagina: 'lista-espera', nivel: 'intermedio', titulo: 'Cupos recuperados, ofertas y motivos' },
   { clave: 'listaEspera.invitaciones', pagina: 'lista-espera', nivel: 'full', titulo: 'Campañas de invitación a la lista de espera' },
+  // Acciones de operación, no reportes. Anular está donde se ven los cupos (Intermedio); detener no depende del plan.
+  {
+    clave: 'listaEspera.anular',
+    pagina: 'lista-espera',
+    nivel: 'intermedio',
+    titulo: 'Anular un cupo liberado para que no se ofrezca a los pacientes',
+    roles: ['direccion', 'operacion'],
+  },
+  { clave: 'listaEspera.control', pagina: 'lista-espera', nivel: 'basico', titulo: 'Detener o reanudar la lista de espera', roles: ['direccion'] },
 
   // Envíos manuales (campañas que se lanzan desde el panel). Es una función de operación, no de reportes: está en
   // todos los niveles. Enviar mensajes a pacientes queda solo para la dirección (y soporte).
@@ -252,6 +261,8 @@ export const ENDPOINTS: Record<string, string> = {
   'GET /api/pacientes/:id': 'pacientes.buscar',
 
   'GET /api/lista-espera': 'listaEspera.inscritos',
+  'POST /api/lista-espera/cupos/:id/anular': 'listaEspera.anular',
+  'POST /api/lista-espera/control': 'listaEspera.control',
   'GET /api/envios/invitacion/previsualizar': 'envios.ver',
   'GET /api/envios/invitacion/historial': 'envios.ver',
   'POST /api/envios/invitacion/ejecutar': 'envios.ejecutar',

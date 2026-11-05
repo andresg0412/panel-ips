@@ -204,9 +204,12 @@ export interface Columna<T> {
   orden?: (fila: T) => number | string | null;
   /** Texto largo: se ajusta en varias líneas en vez de ensanchar la tabla. */
   envolver?: boolean;
+  /** Solo para la pantalla (botones): no sale en el CSV. */
+  sinCsv?: boolean;
 }
 
-function aCsv<T>(filas: T[], cols: Columna<T>[]): string {
+function aCsv<T>(filas: T[], columnas: Columna<T>[]): string {
+  const cols = columnas.filter((c) => !c.sinCsv);
   const esc = (s: string) => (/[";,\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
   const enc = cols.map((c) => esc(c.titulo)).join(';');
   const cuerpo = filas.map((f) => cols.map((c) => esc(c.csv ? c.csv(f[c.clave], f) : String(f[c.clave] ?? ''))).join(';'));

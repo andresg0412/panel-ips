@@ -397,6 +397,23 @@ process.env.PANEL_CONVERSACIONES_ENABLED = 'true';
   check('Conversaciones: no hay exportación del historial (ninguna función ni endpoint de CSV/descarga lo menciona)', !FUNCIONES.some((x) => x.clave.startsWith('conversaciones.') && x.clave !== 'conversaciones.ver') && !Object.keys(ENDPOINTS).some((k) => /conversaciones.*(exportar|csv|descargar)/i.test(k)));
 }
 
+// Control de la lista de espera (proyecto-ips/docs/features/2026-11-05-control-lista-espera.md).
+{
+  const { ENDPOINTS } = await import('../server/funciones.ts');
+  const { evaluar } = await import('../server/acceso.ts');
+  const ctx = (rol, nivel, extra = {}) => ({ usuario: 'prueba', rolReal: rol, nivelReal: nivel, rol, nivel, vistaPrevia: false, historialDesde: null, habilitado: true, ...extra });
+  check('Lista de espera: las rutas de escritura exigen su función', ENDPOINTS['POST /api/lista-espera/control'] === 'listaEspera.control' && ENDPOINTS['POST /api/lista-espera/cupos/:id/anular'] === 'listaEspera.anular');
+  for (const nivel of ['basico', 'intermedio', 'full']) {
+    check(`Detener la lista: Dirección y Soporte sí en ${nivel}`, evaluar(ctx('direccion', nivel), 'listaEspera.control').ok && evaluar(ctx('soporte', nivel), 'listaEspera.control').ok);
+  }
+  for (const rol of ['operacion', 'analista', 'relacion', 'profesional']) {
+    check(`Detener la lista: ${rol} no lo ve (sin candado)`, evaluar(ctx(rol, 'full'), 'listaEspera.control').motivo === 'rol');
+  }
+  check('Detener la lista: Soporte viendo el panel como Operación tampoco', !evaluar(ctx('soporte', 'full', { rol: 'operacion', vistaPrevia: true }), 'listaEspera.control').ok);
+  for (const rol of ['direccion', 'operacion', 'soporte']) check(`Anular cupo: ${rol} sí`, evaluar(ctx(rol, 'full'), 'listaEspera.anular').ok);
+  for (const rol of ['analista', 'relacion', 'profesional']) check(`Anular cupo: ${rol} no`, evaluar(ctx(rol, 'full'), 'listaEspera.anular').motivo === 'rol');
+}
+
 for (const a of advertencias) console.warn(`  ⚠ ${a}`);
 console.log(`Niveles: ${comprobaciones.length} comprobaciones OK${advertencias.length ? ` (${advertencias.length} advertencias)` : ''}`);
 process.exit(0);

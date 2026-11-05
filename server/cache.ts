@@ -48,6 +48,11 @@ export function conCache<T>(clave: string, fn: () => Promise<T>, ttlMs = TTL_MS,
   return valor;
 }
 
+/** Olvida las entradas cuya clave contiene `fragmento`: una acción de la persona se debe ver enseguida. */
+export function olvidarCache(fragmento: string) {
+  for (const clave of entradas.keys()) if (clave.includes(fragmento)) entradas.delete(clave);
+}
+
 /** Recalcula por detrás un valor vencido; si falla, se conserva el anterior hasta que termine su gracia. */
 function refrescar<T>(clave: string, viejo: Entrada, fn: () => Promise<T>, ttlMs: number, graciaMs: number) {
   viejo.refrescando = true;
