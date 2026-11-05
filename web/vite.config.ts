@@ -12,6 +12,8 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // La lista de requisitos de contraseña se comparte con el servidor (server/auth/politica.ts, fuera de web/).
+    fs: { allow: ['..'] },
     proxy: { '/api': 'http://localhost:8100' },
   },
 });

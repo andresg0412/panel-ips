@@ -1,8 +1,10 @@
-// Control de acceso del panel: quién es la persona (nginx la autentica y envía X-Remote-User), qué rol tiene,
-// qué nivel de licencia rige, y si puede usar cada endpoint. Todo se decide aquí, en el servidor: ocultar algo
-// en el frontend es solo presentación.
+// Control de acceso del panel: quién es la persona (la cookie de sesión del login propio; en la transición,
+// nginx con X-Remote-User), qué rol tiene, qué nivel de licencia rige, y si puede usar cada endpoint. Todo se decide
+// aquí, en el servidor: ocultar algo en el frontend es solo presentación.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { poolApp, queryApp } from './db.js';
+import { SESION, modoAuth } from './auth/configuracion.js';
+import { esSondeo, instalarVolcadoSesiones, resolverSesion, tocarSesion } from './auth/sesiones.js';
 import { hoyBogota, sumarDias } from './params.js';
 import {
   ENDPOINTS, FUNCIONES, HISTORIAL_DIAS, LIBRES, MAX_USUARIOS, NOMBRE_NIVEL, ROLES, TAM_MAX_SIN_EXPORTAR,
@@ -50,6 +52,12 @@ export interface Contexto {
   mensaje: string | null;
   /** Profesional vinculado al usuario (nunca viene del navegador). */
   profesional: string | null;
+  /** Sesión del login propio (null en el modo de transición con nginx, o sin sesión). */
+  sesionId: string | null;
+  /** La contraseña es temporal: hasta cambiarla solo se puede llamar a las rutas de DURANTE_CAMBIO. */
+  debeCambiar: boolean;
+  /** Última vez (ms) que la persona confirmó su contraseña en esta sesión; null si no hay sesión. */
+  reautenticadaAt: number | null;
 }
 
 declare module 'fastify' {
@@ -82,6 +90,8 @@ async function leerConfig(): Promise<Config> {
  * despliegue hecho antes de crear el rol panel_app deje al cliente sin panel.
  */
 export const MODO_LEGADO = !poolApp;
+/** El modo legado solo existe en la transición con nginx: con login propio, faltar la base impide arrancar (H6). */
+const legado = () => MODO_LEGADO && modoAuth() === 'nginx';
 const CONFIG_LEGADO: Config = {
   licencia: { nivel: 'full', contacto_whatsapp: null, nota: null, actualizado_at: '', actualizado_por: null },
   usuarios: new Map(),
@@ -90,7 +100,10 @@ const CONFIG_LEGADO: Config = {
 
 /** Configuración vigente (en caché 30 s). Si la base no responde, sigue con la última buena. */
 export async function obtenerConfig(): Promise<Config> {
-  if (MODO_LEGADO) return CONFIG_LEGADO;
+  if (!poolApp) {
+    if (modoAuth() === 'sesion') throw new Error('DATABASE_URL_APP no está configurada');
+    return CONFIG_LEGADO;
+  }
   if (config && config.expira > Date.now()) return config.valor;
   try {
     const valor = await leerConfig();
@@ -110,13 +123,34 @@ export function invalidarConfig() {
 }
 
 // ------------------------------------------------------------------------------------- contexto
-function usuarioDe(req: FastifyRequest): string | null {
+interface Identidad {
+  usuario: string | null;
+  sesionId: string | null;
+  debeCambiar: boolean;
+  reautenticadaAt: number | null;
+}
+
+const ANONIMA: Identidad = { usuario: null, sesionId: null, debeCambiar: false, reautenticadaAt: null };
+
+/**
+ * Quién hace la petición. En modo `sesion` la identidad sale SOLO de la cookie: la cabecera `X-Remote-User` se
+ * ignora por completo (H1), porque cualquiera que llegue al puerto del panel podría enviarla. En modo `nginx` (solo
+ * la transición) se conserva la lógica de siempre.
+ */
+async function identidadDe(req: FastifyRequest): Promise<Identidad> {
+  if (modoAuth() === 'sesion') {
+    const s = await resolverSesion(req);
+    if (!s) return ANONIMA;
+    // Las consultas automáticas del navegador no cuentan como actividad: una pantalla abandonada debe vencer (H4).
+    if (!esSondeo(req)) tocarSesion(s);
+    return { usuario: s.usuario, sesionId: s.id, debeCambiar: s.debeCambiar, reautenticadaAt: s.reautenticadaAt };
+  }
   const h = req.headers['x-remote-user'];
   const u = typeof h === 'string' && h.trim() ? h.trim() : null;
-  if (u) return u;
+  if (u) return { ...ANONIMA, usuario: u };
   // Desarrollo local sin nginx.
-  if (process.env.NODE_ENV !== 'production' && process.env.PANEL_USUARIO_DEV) return process.env.PANEL_USUARIO_DEV;
-  return null;
+  if (process.env.NODE_ENV !== 'production' && process.env.PANEL_USUARIO_DEV) return { ...ANONIMA, usuario: process.env.PANEL_USUARIO_DEV };
+  return ANONIMA;
 }
 
 export function historialDesde(nivel: Nivel): string | null {
@@ -126,14 +160,14 @@ export function historialDesde(nivel: Nivel): string | null {
 
 export async function resolverContexto(req: FastifyRequest): Promise<Contexto> {
   const cfg = await obtenerConfig();
-  const usuario = usuarioDe(req);
+  const { usuario, sesionId, debeCambiar, reautenticadaAt } = await identidadDe(req);
   const u: UsuarioPanel | undefined =
-    MODO_LEGADO && usuario
+    legado() && usuario
       ? { usuario, rol: 'direccion', nombre: null, correo: null, prioridad: 1, activo: true, profesional: null }
       : usuario
         ? cfg.usuarios.get(usuario)
         : undefined;
-  if (MODO_LEGADO && u) cfg.permitidos.add(u.usuario);
+  if (legado() && u) cfg.permitidos.add(u.usuario);
   const nivelReal = cfg.licencia.nivel;
   const rolReal = u?.rol ?? null;
 
@@ -176,6 +210,9 @@ export async function resolverContexto(req: FastifyRequest): Promise<Contexto> {
     habilitado,
     mensaje,
     profesional: u?.profesional ?? null,
+    sesionId,
+    debeCambiar,
+    reautenticadaAt,
   };
 }
 
@@ -218,6 +255,8 @@ export function estadoPaginas(ctx: Contexto): Record<string, { estado: 'ok' | 'b
   }
   const soporte = ctx.rolReal === 'soporte';
   out.soporte = { estado: soporte ? 'ok' : 'oculta', nivel: 'basico' };
+  // "Mi cuenta" no es una función del plan: es de toda persona con sesión (no aparece en Mi plan ni en las pruebas de niveles).
+  out.cuenta = { estado: 'ok', nivel: 'basico' };
   return out;
 }
 
@@ -251,7 +290,8 @@ export function registrarActividad(ctx: Contexto | undefined, fila: Omit<FilaAct
   pendientes.push({ ...fila, usuario: ctx?.usuario ?? null, rol: ctx?.rolReal ?? null, vista_previa: ctx?.vistaPrevia ?? false });
 }
 
-async function volcarActividad() {
+/** Se exporta para que las pruebas no esperen los 10 s del temporizador. */
+export async function volcarActividad() {
   if (!pendientes.length || !poolApp) return;
   const lote = pendientes.splice(0, 500);
   try {
@@ -294,15 +334,60 @@ function denegar(reply: FastifyReply, code: number, cuerpo: Record<string, unkno
   return reply.code(code).send(cuerpo);
 }
 
-export function instalarAcceso(app: FastifyInstance) {
-  app.addHook('onRequest', async (req, reply) => {
-    if (!req.url.startsWith('/api/')) return;
-    const ruta = req.routeOptions.url;
-    // Ruta inexistente: responde el manejador de 404.
-    if (!ruta) return;
-    const clave = `${req.method} ${ruta}`;
-    if (clave === 'GET /api/health') return;
+/** Rutas que cualquiera puede llamar, sin sesión. Todo lo demás de /api exige una (sección 11.5). */
+const PUBLICAS = new Set([
+  'GET /api/health',
+  'POST /api/auth/login',
+  'POST /api/auth/logout',
+  'POST /api/auth/recuperar/solicitar',
+  'POST /api/auth/recuperar/verificar',
+  'POST /api/auth/recuperar/restablecer',
+]);
 
+/** Con una contraseña temporal solo se puede ver quién es, cambiarla, salir y mantener viva la sesión. */
+const DURANTE_CAMBIO = new Set(['GET /api/yo', 'POST /api/auth/contrasena', 'POST /api/auth/logout', 'POST /api/auth/latido']);
+
+/** Acciones que, además de permiso, exigen haber confirmado la contraseña en los últimos 10 minutos (D6). */
+const REAUTENTICAR = new Set(['POST /api/envios/invitacion/ejecutar']);
+
+/**
+ * Escrituras: solo desde el mismo sitio. En modo `sesion` el `Origin` es OBLIGATORIO (H9): una escritura sin él
+ * pasaba el control anterior. En modo `nginx` se conserva el comportamiento de siempre.
+ */
+function origenValido(req: FastifyRequest): boolean {
+  const origen = req.headers.origin;
+  if (!origen) return modoAuth() !== 'sesion';
+  try {
+    return new URL(origen).host === req.headers.host;
+  } catch {
+    return false;
+  }
+}
+
+export function instalarAcceso(app: FastifyInstance) {
+  instalarVolcadoSesiones(app);
+
+  app.addHook('onRequest', async (req, reply) => {
+    // Se decide por la ruta RESUELTA, nunca por el texto de req.url: el enrutador decodifica la URL, así que
+    // /%61pi/resumen llega a la ruta /api/resumen y un control sobre req.url la dejaría pasar sin autenticar.
+    // Sin ruta (inexistente) responde el manejador de 404.
+    const ruta = req.routeOptions.url;
+    if (!ruta?.startsWith('/api/')) return;
+    const clave = `${req.method} ${ruta}`;
+    const modo = modoAuth();
+
+    // En la transición con nginx el login propio no existe.
+    if (modo === 'nginx' && ruta.startsWith('/api/auth/')) return denegar(reply, 404, { error: 'No existe' });
+
+    // 1. Origen: antes de tocar la base.
+    if (req.method !== 'GET' && req.method !== 'HEAD' && !origenValido(req)) {
+      return denegar(reply, 403, { error: 'Origen no permitido', codigo: 'origen' });
+    }
+
+    // 2. Rutas públicas: sin contexto.
+    if (PUBLICAS.has(clave)) return;
+
+    // 3. Contexto, igual que antes, con su 503.
     try {
       req.contexto = await resolverContexto(req);
     } catch (e) {
@@ -312,20 +397,18 @@ export function instalarAcceso(app: FastifyInstance) {
     }
     const ctx = req.contexto;
 
-    // Escrituras: solo JSON desde el mismo sitio (el navegador manda la clave de nginx en cualquier petición).
-    if (req.method !== 'GET' && req.method !== 'HEAD') {
-      const origen = req.headers.origin;
-      if (origen) {
-        let host: string | null = null;
-        try {
-          host = new URL(origen).host;
-        } catch {
-          /* origen inválido */
-        }
-        if (host !== req.headers.host) return denegar(reply, 403, { error: 'Origen no permitido' });
-      }
+    // 4. Sin sesión (o vencida), 401: es la única respuesta que lleva a la pantalla de acceso.
+    if (modo === 'sesion' && !ctx.usuario) return denegar(reply, 401, { error: 'Su sesión terminó', codigo: 'sesion' });
+
+    // 5. Contraseña temporal: nada funciona hasta que se cambie.
+    if (ctx.debeCambiar && !DURANTE_CAMBIO.has(clave)) {
+      return denegar(reply, 403, { error: 'Debe cambiar su contraseña', codigo: 'cambiar_contrasena' });
     }
 
+    // 6. Rutas de la propia cuenta: no dependen del plan ni de estar habilitado (quien está fuera del plan puede salir).
+    if (ruta.startsWith('/api/auth/')) return;
+
+    // 7. Desde aquí, las reglas de siempre: libres, habilitado, soporte, ENDPOINTS, historial.
     if (LIBRES.has(clave)) return;
     if (!ctx.habilitado) return denegar(reply, 403, { error: ctx.mensaje, codigo: 'usuario' });
 
@@ -349,6 +432,11 @@ export function instalarAcceso(app: FastifyInstance) {
       }
     }
 
+    // Reautenticación: se pide DESPUÉS de comprobar el permiso, para no pedir la contraseña a quien igual sería rechazado.
+    if (modo === 'sesion' && REAUTENTICAR.has(clave) && Date.now() - (ctx.reautenticadaAt ?? 0) > SESION.reautenticacionMs) {
+      return denegar(reply, 403, { error: 'Confirme su contraseña para continuar', codigo: 'reautenticar' });
+    }
+
     // Historial: el rango de fechas no puede empezar antes de lo que permite el nivel.
     if (ctx.historialDesde) {
       const h = ctx.historialDesde;
@@ -358,7 +446,10 @@ export function instalarAcceso(app: FastifyInstance) {
   });
 
   app.addHook('onResponse', async (req, reply) => {
-    if (!req.url.startsWith('/api/') || !req.routeOptions.url) return;
+    if (!req.routeOptions.url?.startsWith('/api/')) return;
+    // Las rutas de autenticación llevan sus propios eventos, y una petición sin usuario (sondeos anónimos del
+    // login público) no debe llenar panel.actividad (H14).
+    if (req.routeOptions.url.startsWith('/api/auth/') || !req.contexto?.usuario) return;
     const clave = `${req.method} ${req.routeOptions.url}`;
     if (SIN_REGISTRO.has(clave) || clave === 'POST /api/actividad') return;
     if (SIN_REGISTRO_SI_OK.has(clave) && reply.statusCode < 400) return;

@@ -7,10 +7,10 @@ import { fecha, fechaHora, num } from '../format';
 
 // Consola del rol soporte. Solo la ve German; el cliente nunca llega aquí (el servidor rechaza /api/soporte/*).
 
-type Vista = 'alertas' | 'licencia' | 'usuarios' | 'actividad' | 'incidentes';
+type Vista = 'alertas' | 'licencia' | 'usuarios' | 'accesos' | 'actividad' | 'incidentes';
 
 export default function Soporte(_: { rango: Rango }) {
-  const [vista, setVista] = usePestana<Vista>(['alertas', 'licencia', 'usuarios', 'actividad', 'incidentes'], 'alertas');
+  const [vista, setVista] = usePestana<Vista>(['alertas', 'licencia', 'usuarios', 'accesos', 'actividad', 'incidentes'], 'alertas');
   return (
     <>
       <Pestanas<Vista>
@@ -18,13 +18,15 @@ export default function Soporte(_: { rango: Rango }) {
           ['alertas', '¿Qué necesita soporte?'],
           ['licencia', '¿Cómo está el acceso?'],
           ['usuarios', '¿Quién puede hacer qué?'],
+          ['accesos', '¿Quién ha entrado?'],
           ['actividad', '¿Qué ha ocurrido?'],
           ['incidentes', '¿Qué afectó los datos?'],
         ]}
         descripciones={{
           alertas: 'Revise problemas técnicos activos y las acciones disponibles para resolverlos.',
           licencia: 'Consulte el plan, las funciones habilitadas y las vistas previas disponibles.',
-          usuarios: 'Conozca los usuarios, roles y permisos que controlan el acceso al panel.',
+          usuarios: 'Conozca los usuarios, roles y permisos que controlan el acceso al panel, y administre sus contraseñas y sesiones.',
+          accesos: 'Revise los inicios de sesión, los intentos fallidos y los cambios de contraseña de cada cuenta.',
           actividad: 'Consulte los cambios y acciones registrados en el sistema.',
           incidentes: 'Identifique períodos con datos incompletos y su impacto en los informes.',
         }}
@@ -34,6 +36,7 @@ export default function Soporte(_: { rango: Rango }) {
       {vista === 'alertas' && <AlertasTecnicas />}
       {vista === 'licencia' && <Licencia />}
       {vista === 'usuarios' && <Usuarios />}
+      {vista === 'accesos' && <Accesos />}
       {vista === 'actividad' && <Actividad />}
       {vista === 'incidentes' && <Incidentes />}
     </>
@@ -76,6 +79,7 @@ const GRUPO: Record<string, string> = {
   integraciones: 'Integraciones',
   lista_espera: 'Lista de espera',
   panel: 'Panel',
+  seguridad: 'Seguridad',
 };
 const COLOR_SEV: Record<string, string> = { alta: 'var(--critical)', media: 'var(--warning)', baja: 'var(--s-other)' };
 const ESTADO: Record<string, string> = { activa: 'Activa', revisada: 'Revisada', silenciada: 'Silenciada', resuelta: 'Resuelta' };
@@ -361,9 +365,21 @@ interface UsuarioFila {
   visitas_7d: number;
   consultas_7d: number;
   exportaciones_30d: number;
+  /** Estado de la contraseña: nunca se conoce su valor, solo si existe y si es temporal. */
+  clave: 'definida' | 'temporal' | 'sin_definir';
+  sesiones: number;
+  bloqueada: boolean;
 }
 
-function FilaUsuario({ u, roles, profesionales, onGuardado }: { u: UsuarioFila; roles: Record<string, string>; profesionales: string[]; onGuardado: () => void }) {
+const ESTADO_CLAVE: Record<UsuarioFila['clave'], string> = { definida: 'Definida', temporal: 'Temporal', sin_definir: 'Sin definir' };
+
+interface Temporal {
+  usuario: string;
+  temporal: string;
+  venceAt: string;
+}
+
+function FilaUsuario({ u, roles, profesionales, onGuardado, onTemporal }: { u: UsuarioFila; roles: Record<string, string>; profesionales: string[]; onGuardado: () => void; onTemporal: (t: Temporal) => void }) {
   const [f, setF] = useState({ rol: u.rol, nombre: u.nombre ?? '', correo: u.correo ?? '', prioridad: u.prioridad, activo: u.activo, profesional: u.profesional ?? '' });
   const [msg, setMsg] = useState<string | null>(null);
   const cambiado =
@@ -379,6 +395,31 @@ function FilaUsuario({ u, roles, profesionales, onGuardado }: { u: UsuarioFila; 
       setMsg((e as Error).message);
     }
   };
+  // Acciones sobre el acceso de la cuenta. Todas piden confirmación y dejan evento en la pestaña Accesos.
+  const ruta = (accion: string) => `/api/soporte/usuarios/${encodeURIComponent(u.usuario)}/${accion}`;
+  const ejecutar = async (confirmacion: string, accion: () => Promise<void>) => {
+    if (!confirm(confirmacion)) return;
+    setMsg(null);
+    try {
+      await accion();
+      onGuardado();
+    } catch (e) {
+      setMsg((e as Error).message);
+    }
+  };
+  const generarTemporal = () =>
+    ejecutar(`¿Generar una contraseña temporal para ${u.usuario}? Se cerrarán sus sesiones y deberá cambiarla al entrar. La verá una sola vez.`, async () => {
+      const r = await enviarJson<{ temporal: string; venceAt: string }>('POST', ruta('temporal'));
+      onTemporal({ usuario: u.usuario, ...r });
+    });
+  const cerrarSesiones = () =>
+    ejecutar(`¿Cerrar las ${u.sesiones} sesiones abiertas de ${u.usuario}? Tendrá que volver a iniciar sesión.`, async () => {
+      await enviarJson('POST', ruta('cerrar-sesiones'));
+    });
+  const desbloquear = () =>
+    ejecutar(`¿Desbloquear la cuenta ${u.usuario}?`, async () => {
+      await enviarJson('POST', ruta('desbloquear'));
+    });
   return (
     <tr>
       <td><b>{u.usuario}</b>{msg && <div className="nota" style={{ color: 'var(--critical)' }}>{msg}</div>}</td>
@@ -402,10 +443,20 @@ function FilaUsuario({ u, roles, profesionales, onGuardado }: { u: UsuarioFila; 
       </td>
       <td><input type="checkbox" checked={f.activo} onChange={(e) => setF({ ...f, activo: e.target.checked })} aria-label="Activo" /></td>
       <td>{u.enPlan ? <span style={{ color: 'var(--up)' }}>Sí</span> : <span style={{ color: 'var(--down)' }} title="El plan no alcanza para este usuario (ver prioridad)">No</span>}</td>
+      <td>{ESTADO_CLAVE[u.clave]}</td>
+      <td className="num">{num(u.sesiones)}</td>
+      <td>{u.bloqueada ? <span style={{ color: 'var(--down)' }}>Bloqueada</span> : <span className="nota" style={{ margin: 0 }}>No</span>}</td>
       <td>{u.ultimo ? fechaHora(u.ultimo) : '—'}</td>
       <td className="num">{num(u.visitas_7d)}</td>
       <td className="num">{num(u.exportaciones_30d)}</td>
-      <td><button className="boton" disabled={!cambiado} onClick={guardar}>Guardar</button></td>
+      <td>
+        <div className="acciones-usuario">
+          <button className="boton" disabled={!cambiado} onClick={guardar}>Guardar</button>
+          <button className="boton" disabled={!u.activo} onClick={generarTemporal}>Generar temporal</button>
+          <button className="boton" disabled={u.sesiones === 0} onClick={cerrarSesiones}>Cerrar sesiones</button>
+          <button className="boton" disabled={!u.bloqueada} onClick={desbloquear}>Desbloquear</button>
+        </div>
+      </td>
     </tr>
   );
 }
@@ -418,6 +469,8 @@ function Usuarios() {
   const roles = yo?.roles ?? {};
   const [nuevo, setNuevo] = useState({ usuario: '', rol: 'analista' });
   const [msg, setMsg] = useState<string | null>(null);
+  // La contraseña temporal solo vive en el estado de esta pantalla: se muestra una vez y se pierde al cerrar la ventana.
+  const [temporal, setTemporal] = useState<Temporal | null>(null);
   const crear = async () => {
     setMsg(null);
     try {
@@ -435,23 +488,24 @@ function Usuarios() {
         <>
           <Tarjeta
             titulo="Usuarios y roles"
-            ayuda={`El usuario y la contraseña se crean en nginx (skill desplegar-droplet); aquí se asigna su rol. Prioridad: si el plan limita el número de usuarios${data.maxUsuarios === null ? '' : ` (hoy ${data.maxUsuarios})`}, entran primero los de número menor. Soporte no cuenta en el límite.`}
+            ayuda={`Aquí se crean los usuarios, se les asigna su rol y se administra su acceso: la persona define su propia contraseña (con una temporal que usted genera, o por correo). Prioridad: si el plan limita el número de usuarios${data.maxUsuarios === null ? '' : ` (hoy ${data.maxUsuarios})`}, entran primero los de número menor. Soporte no cuenta en el límite.`}
           >
             <div className="tabla-wrap">
               <table>
                 <thead>
                   <tr>
                     <th>Usuario</th><th>Rol</th><th>Nombre</th><th>Correo</th><th className="num">Prioridad</th><th>Profesional (Mi agenda)</th><th>Activo</th><th>En el plan</th>
+                    <th>Contraseña</th><th className="num">Sesiones</th><th>Bloqueo</th>
                     <th>Último acceso</th><th className="num">Pantallas 7 d</th><th className="num">Descargas 30 d</th><th />
                   </tr>
                 </thead>
                 <tbody>
-                  {data.filas.map((u) => <FilaUsuario key={`${u.usuario}-${u.rol}-${u.prioridad}-${u.activo}-${u.profesional ?? ''}`} u={u} roles={roles} profesionales={profesionales} onGuardado={recargar} />)}
+                  {data.filas.map((u) => <FilaUsuario key={`${u.usuario}-${u.rol}-${u.prioridad}-${u.activo}-${u.profesional ?? ''}`} u={u} roles={roles} profesionales={profesionales} onGuardado={recargar} onTemporal={setTemporal} />)}
                 </tbody>
               </table>
             </div>
           </Tarjeta>
-          <Tarjeta titulo="Agregar usuario" ayuda="Primero cree el usuario en nginx (.htpasswd-panel-ips); si no tiene rol aquí, al entrar verá un aviso de que no tiene acceso.">
+          <Tarjeta titulo="Agregar usuario" ayuda="Cree el usuario y su rol; luego cargue su correo y genere una contraseña temporal para que pueda entrar. Sin contraseña no puede iniciar sesión.">
             <div className="filtros">
               <input placeholder="usuario" value={nuevo.usuario} maxLength={40} onChange={(e) => setNuevo({ ...nuevo, usuario: e.target.value })} />
               <select value={nuevo.rol} onChange={(e) => setNuevo({ ...nuevo, rol: e.target.value })}>
@@ -460,6 +514,109 @@ function Usuarios() {
               <button className="boton" disabled={!/^[A-Za-z0-9._-]{2,40}$/.test(nuevo.usuario.trim())} onClick={crear}>Agregar</button>
             </div>
             {msg && <p className="nota" style={{ color: 'var(--critical)' }}>{msg}</p>}
+          </Tarjeta>
+          {temporal && <VentanaTemporal t={temporal} onCerrar={() => setTemporal(null)} />}
+        </>
+      )}
+    </>
+  );
+}
+
+/** Muestra la contraseña temporal UNA sola vez. Al cerrar la ventana se pierde: no se guarda en ningún lado. */
+function VentanaTemporal({ t, onCerrar }: { t: Temporal; onCerrar: () => void }) {
+  const [copiada, setCopiada] = useState(false);
+  const copiar = async () => {
+    try {
+      await navigator.clipboard.writeText(t.temporal);
+      setCopiada(true);
+    } catch {
+      setCopiada(false);
+    }
+  };
+  return (
+    <div className="ventana-velo">
+      <div className="ventana" role="dialog" aria-modal="true" aria-labelledby="temporal-titulo">
+        <h2 id="temporal-titulo">Contraseña temporal de {t.usuario}</h2>
+        <p className="temporal-valor" aria-label="Contraseña temporal">{t.temporal}</p>
+        <p className="campo-ayuda">
+          <b>No se volverá a mostrar.</b> Entréguela por un canal distinto al del correo. Vence el {fechaHora(t.venceAt)} y la persona deberá cambiarla al entrar.
+        </p>
+        <div className="ventana-acciones">
+          <button className="boton boton-primario" onClick={copiar}>{copiada ? 'Copiada' : 'Copiar'}</button>
+          <button className="boton" onClick={onCerrar}>Cerrar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------------------------- accesos
+interface DatosAccesos {
+  eventos: { at: string; tipo: string; usuario: string | null; actor: string | null; ip: string | null; agente: string | null; detalle: string | null }[];
+  resumen: { porTipo: { clave: string; n: number }[]; porDia: { fecha: string; entradas: number; fallidos: number }[] };
+}
+
+const EVENTO: Record<string, string> = {
+  login_ok: 'Inicio de sesión',
+  login_fallido: 'Intento fallido',
+  cuenta_bloqueada: 'Cuenta bloqueada',
+  logout: 'Cierre de sesión',
+  sesion_expirada: 'Sesión vencida',
+  sesion_revocada: 'Sesión cerrada por otra vía',
+  otp_solicitado: 'Código de recuperación pedido',
+  otp_fallido: 'Código de recuperación fallido',
+  otp_validado: 'Código de recuperación correcto',
+  contrasena_cambiada: 'Contraseña cambiada',
+  contrasena_restablecida: 'Contraseña restablecida',
+  contrasena_temporal_generada: 'Contraseña temporal generada',
+  cuenta_desbloqueada: 'Cuenta desbloqueada',
+  usuario_desactivado: 'Usuario desactivado',
+  correo_fallido: 'Correo no enviado',
+  acceso_emergencia: 'Acceso de emergencia',
+  sesion_verificacion: 'Verificación de despliegue',
+};
+
+function Accesos() {
+  const [usuario, setUsuario] = useState('');
+  const [dias, setDias] = useState('7');
+  const url = `/api/soporte/autenticacion?${new URLSearchParams({ dias, ...(usuario ? { usuario } : {}) })}`;
+  const { data, error, cargando } = useApi<DatosAccesos>(url, 60_000);
+  const usuarios = useApi<{ filas: UsuarioFila[] }>('/api/soporte/usuarios');
+  return (
+    <>
+      <div className="filtros">
+        <select value={usuario} onChange={(e) => setUsuario(e.target.value)} aria-label="Usuario">
+          <option value="">Todos los usuarios</option>
+          {(usuarios.data?.filas ?? []).map((u) => <option key={u.usuario} value={u.usuario}>{u.usuario}</option>)}
+        </select>
+        <select value={dias} onChange={(e) => setDias(e.target.value)} aria-label="Período">
+          {['1', '7', '30', '90', '365'].map((d) => <option key={d} value={d}>Últimos {d} {d === '1' ? 'día' : 'días'}</option>)}
+        </select>
+      </div>
+      <Estado cargando={cargando} error={error} hayDatos={!!data} />
+      {data && (
+        <>
+          <div className="grid g2">
+            <Tarjeta titulo="Qué ha pasado" ayuda="Eventos de acceso del período, por tipo.">
+              <ListaConteo items={data.resumen.porTipo.map((p) => ({ clave: p.clave, etiqueta: EVENTO[p.clave] ?? p.clave, n: p.n }))} />
+            </Tarjeta>
+            <Tarjeta titulo="Entradas y fallos por día" ayuda="Inicios de sesión correctos (número) y cuántos intentos fallaron ese día.">
+              <ListaConteo items={[...data.resumen.porDia].reverse().slice(0, 14).map((d) => ({ clave: d.fecha, etiqueta: `${fecha(d.fecha)} · ${d.fallidos} ${d.fallidos === 1 ? 'fallo' : 'fallos'}`, n: d.entradas }))} />
+            </Tarjeta>
+          </div>
+          <Tarjeta titulo="Registro de accesos" ayuda="Últimos 300 eventos. Nunca se guardan contraseñas ni códigos; un intento con un usuario que no existe queda sin nombre.">
+            <Tabla
+              filas={data.eventos}
+              columnas={[
+                { clave: 'at', titulo: 'Cuándo', formato: fechaHora },
+                { clave: 'tipo', titulo: 'Qué', formato: (v) => EVENTO[v] ?? v },
+                { clave: 'usuario', titulo: 'Cuenta', formato: (v) => v ?? '—' },
+                { clave: 'actor', titulo: 'Hecho por', formato: (v) => v ?? 'La propia persona' },
+                { clave: 'ip', titulo: 'Dirección', formato: (v) => v ?? '—' },
+                { clave: 'detalle', titulo: 'Detalle', envolver: true },
+              ]}
+              vacio="Sin eventos con estos filtros"
+            />
           </Tarjeta>
         </>
       )}

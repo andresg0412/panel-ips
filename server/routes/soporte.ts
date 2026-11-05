@@ -8,8 +8,17 @@ import { MAX_USUARIOS, NOMBRE_NIVEL, esNivel, esRol } from '../funciones.js';
 import { AREAS_INCIDENTE, recargarIncidentes } from '../incidentes.js';
 import { ejecutarVigilante, estadoVigilante } from '../vigilante.js';
 import { ErrorParametro } from '../params.js';
+import { CLAVE } from '../auth/configuracion.js';
+import { generarTemporal, hashear } from '../auth/contrasenas.js';
+import { eventoDe } from '../auth/eventos.js';
+import { cuentaBloqueada, desbloquearIdentificadores } from '../auth/limites.js';
+import { SQL_SESION_ACTIVA, aBogota, revocarSesionesDeUsuario } from '../auth/sesiones.js';
+import { buscarPorUsuario, conTransaccion, guardarContrasena } from '../auth/cuentas.js';
 
 const FECHA = '^\\d{4}-\\d{2}-\\d{2}$';
+/** Formato mínimo de un correo (RF-43). La verificación real es que el proveedor lo entregue. */
+const CORREO = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
+const PARAMS_USUARIO = { type: 'object', properties: { usuario: { type: 'string', pattern: '^[A-Za-z0-9._-]{2,40}$' } } };
 const COLS_ALERTA = `id, clave, grupo, severidad, titulo, detalle, impacto, enlace, estado,
   to_char(primera_vez AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD"T"HH24:MI:SS') AS primera_vez, to_char(ultima_vez AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD"T"HH24:MI:SS') AS ultima_vez, to_char(silenciada_hasta AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD"T"HH24:MI:SS') AS silenciada_hasta,
   to_char(resuelta_at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD"T"HH24:MI:SS') AS resuelta_at, resuelta_auto, nota, actualizado_por, to_char(actualizado_at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD"T"HH24:MI:SS') AS actualizado_at`;
@@ -139,15 +148,22 @@ export default async function rutasSoporte(app: FastifyInstance) {
   // -------------------------------------------------------------------------------------- usuarios
   app.get('/api/soporte/usuarios', async () => {
     const cfg = await obtenerConfig();
-    const uso = await queryApp<{ usuario: string; ultimo: string | null; visitas_7d: number; consultas_7d: number; exportaciones_30d: number }>(
-      `SELECT usuario,
-              to_char(max(at) FILTER (WHERE tipo = 'visita' OR (tipo = 'api' AND status < 400)) AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD"T"HH24:MI:SS') AS ultimo,
-              count(*) FILTER (WHERE tipo = 'visita' AND at > now() - interval '7 days')::int AS visitas_7d,
-              count(*) FILTER (WHERE tipo = 'api' AND at > now() - interval '7 days')::int AS consultas_7d,
-              count(*) FILTER (WHERE tipo = 'exportacion' AND at > now() - interval '30 days')::int AS exportaciones_30d
-         FROM panel.actividad WHERE usuario IS NOT NULL AND NOT vista_previa GROUP BY 1`,
-    );
+    const [uso, creds, sesiones] = await Promise.all([
+      queryApp<{ usuario: string; ultimo: string | null; visitas_7d: number; consultas_7d: number; exportaciones_30d: number }>(
+        `SELECT usuario,
+                to_char(max(at) FILTER (WHERE tipo = 'visita' OR (tipo = 'api' AND status < 400)) AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD"T"HH24:MI:SS') AS ultimo,
+                count(*) FILTER (WHERE tipo = 'visita' AND at > now() - interval '7 days')::int AS visitas_7d,
+                count(*) FILTER (WHERE tipo = 'api' AND at > now() - interval '7 days')::int AS consultas_7d,
+                count(*) FILTER (WHERE tipo = 'exportacion' AND at > now() - interval '30 days')::int AS exportaciones_30d
+           FROM panel.actividad WHERE usuario IS NOT NULL AND NOT vista_previa GROUP BY 1`,
+      ),
+      // Nunca se lee la columna `hash`: la consola solo necesita saber si hay contraseña y si es temporal.
+      queryApp<{ usuario: string; debe_cambiar: boolean }>(`SELECT usuario, debe_cambiar FROM panel.credenciales`),
+      queryApp<{ usuario: string; n: number }>(`SELECT s.usuario, count(*)::int AS n FROM panel.sesiones s WHERE ${SQL_SESION_ACTIVA} GROUP BY 1`),
+    ]);
     const porUsuario = new Map(uso.map((u) => [u.usuario, u]));
+    const credencial = new Map(creds.map((c) => [c.usuario, c.debe_cambiar]));
+    const sesionesDe = new Map(sesiones.map((x) => [x.usuario, x.n]));
     const filas = [...cfg.usuarios.values()]
       .sort((a, b) => a.prioridad - b.prioridad || a.usuario.localeCompare(b.usuario))
       .map((u) => ({
@@ -157,6 +173,9 @@ export default async function rutasSoporte(app: FastifyInstance) {
         visitas_7d: porUsuario.get(u.usuario)?.visitas_7d ?? 0,
         consultas_7d: porUsuario.get(u.usuario)?.consultas_7d ?? 0,
         exportaciones_30d: porUsuario.get(u.usuario)?.exportaciones_30d ?? 0,
+        clave: (credencial.has(u.usuario) ? (credencial.get(u.usuario) ? 'temporal' : 'definida') : 'sin_definir') as 'definida' | 'temporal' | 'sin_definir',
+        sesiones: sesionesDe.get(u.usuario) ?? 0,
+        bloqueada: cuentaBloqueada([u.usuario, u.correo]),
       }));
     return { filas, maxUsuarios: MAX_USUARIOS[cfg.licencia.nivel] };
   });
@@ -190,20 +209,31 @@ export default async function rutasSoporte(app: FastifyInstance) {
       if (usuario === req.contexto!.usuario && (b.rol !== 'soporte' || b.activo === false)) {
         throw new ErrorParametro('No puede quitarse a sí mismo el rol de soporte');
       }
-      const [fila] = await queryApp(
-        `INSERT INTO panel.usuarios (usuario, rol, nombre, correo, prioridad, activo, profesional)
-         VALUES ($1, $2, nullif($3, ''), nullif($4, ''), coalesce($5, 100), coalesce($6, true), nullif($7, ''))
-         ON CONFLICT (usuario) DO UPDATE
-            SET rol = EXCLUDED.rol,
-                nombre = CASE WHEN $3::text IS NULL THEN panel.usuarios.nombre ELSE EXCLUDED.nombre END,
-                correo = CASE WHEN $4::text IS NULL THEN panel.usuarios.correo ELSE EXCLUDED.correo END,
-                prioridad = coalesce($5, panel.usuarios.prioridad),
-                activo = coalesce($6, panel.usuarios.activo),
-                profesional = CASE WHEN $7::text IS NULL THEN panel.usuarios.profesional ELSE EXCLUDED.profesional END,
-                actualizado_at = now()
-         RETURNING usuario, rol, nombre, correo, prioridad, activo, profesional`,
-        [usuario, b.rol, b.nombre ?? null, b.correo ?? null, b.prioridad ?? null, b.activo ?? null, b.profesional === undefined ? null : b.profesional.trim()],
-      );
+      // Correo: sin espacios, en minúsculas y con formato válido; vacío lo borra (RF-43, H8).
+      const correo = b.correo === undefined ? null : b.correo.trim().toLowerCase();
+      if (correo && !CORREO.test(correo)) throw new ErrorParametro('El correo no tiene un formato válido');
+      const [previo] = await queryApp<{ activo: boolean }>(`SELECT activo FROM panel.usuarios WHERE usuario = $1`, [usuario]);
+      let fila;
+      try {
+        [fila] = await queryApp(
+          `INSERT INTO panel.usuarios (usuario, rol, nombre, correo, prioridad, activo, profesional)
+           VALUES ($1, $2, nullif($3, ''), nullif($4, ''), coalesce($5, 100), coalesce($6, true), nullif($7, ''))
+           ON CONFLICT (usuario) DO UPDATE
+              SET rol = EXCLUDED.rol,
+                  nombre = CASE WHEN $3::text IS NULL THEN panel.usuarios.nombre ELSE EXCLUDED.nombre END,
+                  correo = CASE WHEN $4::text IS NULL THEN panel.usuarios.correo ELSE EXCLUDED.correo END,
+                  prioridad = coalesce($5, panel.usuarios.prioridad),
+                  activo = coalesce($6, panel.usuarios.activo),
+                  profesional = CASE WHEN $7::text IS NULL THEN panel.usuarios.profesional ELSE EXCLUDED.profesional END,
+                  actualizado_at = now()
+           RETURNING usuario, rol, nombre, correo, prioridad, activo, profesional`,
+          [usuario, b.rol, b.nombre ?? null, correo, b.prioridad ?? null, b.activo ?? null, b.profesional === undefined ? null : b.profesional.trim()],
+        );
+      } catch (e) {
+        // Índice único sobre lower(correo): dos personas no pueden compartir correo.
+        if ((e as { code?: string }).code === '23505') throw new ErrorParametro('Ese correo ya está en uso');
+        throw e;
+      }
       registrarActividad(req.contexto, {
         tipo: 'configuracion',
         ruta: 'usuario',
@@ -212,9 +242,79 @@ export default async function rutasSoporte(app: FastifyInstance) {
         ms: null,
       });
       invalidarConfig();
+      // Desactivar corta sus sesiones al instante (la caché de sesiones se borra en el mismo paso).
+      if (b.activo === false) {
+        const cerradas = await revocarSesionesDeUsuario(usuario, 'desactivado');
+        if (previo?.activo !== false) {
+          await eventoDe(req, { tipo: 'usuario_desactivado', usuario, actor: req.contexto!.usuario, detalle: `sesiones cerradas: ${cerradas}` });
+        }
+      }
       return fila;
     },
   );
+
+  // ------------------------------------------------------------------------- acceso de cada cuenta
+  // Contraseña temporal: se muestra UNA sola vez, vence en 24 h y obliga a cambiarla. No se registra ni se guarda en claro.
+  app.post('/api/soporte/usuarios/:usuario/temporal', { schema: { params: PARAMS_USUARIO } }, async (req, reply) => {
+    const { usuario } = req.params as { usuario: string };
+    const quien = req.contexto!.usuario!;
+    if (usuario === quien) throw new ErrorParametro('Cambie su propia contraseña desde Mi cuenta; una temporal le cerraría la sesión.');
+    const cuenta = await buscarPorUsuario(usuario);
+    if (!cuenta) return reply.code(404).send({ error: 'No existe ese usuario' });
+    if (!cuenta.activo) throw new ErrorParametro('Solo se puede generar una contraseña temporal para usuarios activos');
+    const temporal = generarTemporal();
+    const venceAt = new Date(Date.now() + CLAVE.temporalVigenciaMs);
+    const hash = await hashear(temporal);
+    await conTransaccion((cli) => guardarContrasena(cli, usuario, hash, { debeCambiar: true, temporalExpiraAt: venceAt }));
+    // Quien tenga una sesión abierta con la clave anterior debe volver a entrar.
+    await revocarSesionesDeUsuario(usuario, 'soporte');
+    await eventoDe(req, { tipo: 'contrasena_temporal_generada', usuario, actor: quien });
+    return { temporal, venceAt: aBogota(venceAt.getTime()) };
+  });
+
+  app.post('/api/soporte/usuarios/:usuario/desbloquear', { schema: { params: PARAMS_USUARIO } }, async (req, reply) => {
+    const { usuario } = req.params as { usuario: string };
+    const cuenta = await buscarPorUsuario(usuario);
+    if (!cuenta) return reply.code(404).send({ error: 'No existe ese usuario' });
+    desbloquearIdentificadores([cuenta.usuario, cuenta.correo]);
+    await eventoDe(req, { tipo: 'cuenta_desbloqueada', usuario, actor: req.contexto!.usuario });
+    return reply.code(204).send();
+  });
+
+  app.post('/api/soporte/usuarios/:usuario/cerrar-sesiones', { schema: { params: PARAMS_USUARIO } }, async (req, reply) => {
+    const { usuario } = req.params as { usuario: string };
+    const cuenta = await buscarPorUsuario(usuario);
+    if (!cuenta) return reply.code(404).send({ error: 'No existe ese usuario' });
+    // Si soporte se las cierra a sí mismo, conserva la sesión desde la que lo hace.
+    const propia = usuario === req.contexto!.usuario ? req.contexto!.sesionId ?? undefined : undefined;
+    const cerradas = await revocarSesionesDeUsuario(usuario, 'soporte', propia);
+    await eventoDe(req, { tipo: 'sesion_revocada', usuario, actor: req.contexto!.usuario, detalle: `cerradas por soporte: ${cerradas}` });
+    return { cerradas };
+  });
+
+  // Accesos: los eventos de autenticación (quién entró, quién falló, quién cambió qué).
+  app.get('/api/soporte/autenticacion', async (req) => {
+    const q = req.query as Record<string, unknown>;
+    const usuario = typeof q.usuario === 'string' && q.usuario ? q.usuario.slice(0, 40) : null;
+    const dias = Math.min(365, Math.max(1, Number.parseInt(String(q.dias ?? '7'), 10) || 7));
+    const filtro = `at > now() - make_interval(days => $1) AND ($2::text IS NULL OR usuario = $2)`;
+    const [eventos, porTipo, porDia] = await Promise.all([
+      queryApp(
+        `SELECT to_char(at AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD"T"HH24:MI:SS') AS at, tipo, usuario, actor, host(ip) AS ip, agente, detalle
+           FROM panel.eventos_autenticacion WHERE ${filtro} ORDER BY at DESC, id DESC LIMIT 300`,
+        [dias, usuario],
+      ),
+      queryApp(`SELECT tipo AS clave, count(*)::int AS n FROM panel.eventos_autenticacion WHERE ${filtro} GROUP BY 1 ORDER BY 2 DESC`, [dias, usuario]),
+      queryApp(
+        `SELECT (at AT TIME ZONE 'America/Bogota')::date::text AS fecha,
+                count(*) FILTER (WHERE tipo = 'login_ok')::int AS entradas,
+                count(*) FILTER (WHERE tipo = 'login_fallido')::int AS fallidos
+           FROM panel.eventos_autenticacion WHERE ${filtro} GROUP BY 1 ORDER BY 1`,
+        [dias, usuario],
+      ),
+    ]);
+    return { eventos, resumen: { porTipo, porDia } };
+  });
 
   // ------------------------------------------------------------------------------------- actividad
   app.get('/api/soporte/actividad', async (req) => {

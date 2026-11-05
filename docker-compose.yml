@@ -6,7 +6,7 @@ services:
     container_name: panel-ips
     restart: unless-stopped
     env_file: .env
-    # Solo escucha en localhost: el acceso desde internet pasa por nginx (HTTPS + usuario/contraseña).
+    # Solo escucha en localhost: el acceso desde internet pasa por nginx (HTTPS); la autenticación la hace el propio panel (login con sesiones).
     ports:
       - "127.0.0.1:8100:8100"
     networks:

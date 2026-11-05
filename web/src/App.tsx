@@ -1,5 +1,5 @@
 import { useEffect, useState, type ComponentType } from 'react';
-import { RefrescoCtx, cambiarVistaPrevia, registrar, useApi, useConexion, type Rango } from './api';
+import { RefrescoCtx, cambiarVistaPrevia, enviarJson, registrar, useApi, useConexion, useYo, type Rango } from './api';
 import { SelectorRango, rangoPreset } from './components/ui';
 import Resumen from './pages/Resumen';
 import Campanas from './pages/Campanas';
@@ -18,6 +18,12 @@ import MiPlan from './pages/MiPlan';
 import Soporte from './pages/Soporte';
 import Envios from './pages/Envios';
 import Conversaciones from './pages/Conversaciones';
+import Acceso from './pages/Acceso';
+import CambioObligatorio from './pages/CambioObligatorio';
+import MiCuenta from './pages/MiCuenta';
+import AvisoInactividad from './components/AvisoInactividad';
+import { alCerrarEnOtraPestana, anunciarCierre, limpiarAlmacenamientoDeSesion } from './sesion';
+import { aplicarTema, leerTema, type Tema } from './tema';
 import { IncidentesCtx, type Incidente } from './incidentes';
 import { AccesoCtx, Bloqueado, Candado, type Yo } from './acceso';
 import { fecha } from './format';
@@ -51,6 +57,7 @@ const PAGINAS: Pagina[] = [
   { ruta: 'pacientes', titulo: 'Pacientes', desc: 'Quiénes son, cuántos llegan y cada cuánto vuelven', Comp: Pacientes, conRango: true, funcion: 'pacientes.panorama' },
   { ruta: 'marketing', titulo: 'Marketing', desc: 'Alcance de WhatsApp y pacientes para invitar a volver', Comp: Marketing, conRango: false, funcion: 'marketing.alcance' },
   { ruta: 'alertas', titulo: 'Alertas', desc: 'Lo que requiere atención y la salud de los datos', Comp: Alertas, conRango: true, funcion: 'alertas.panel' },
+  { ruta: 'cuenta', titulo: 'Mi cuenta', desc: 'Sus datos, su contraseña y las sesiones abiertas de su cuenta', Comp: MiCuenta, conRango: false, funcion: '' },
   { ruta: 'plan', titulo: 'Mi plan', desc: 'Lo que incluye cada plan del panel', Comp: MiPlan, conRango: false, funcion: 'plan.ver' },
   { ruta: 'soporte', titulo: 'Soporte', desc: 'Salud técnica del sistema, licencia, usuarios y actividad', Comp: Soporte, conRango: false, funcion: '' },
 ];
@@ -118,13 +125,6 @@ function escribirUrl(e: Estado) {
   if (location.hash !== hash) history.replaceState(null, '', hash);
 }
 
-type Tema = 'auto' | 'light' | 'dark';
-
-function aplicarTema(t: Tema) {
-  if (t === 'auto') delete document.documentElement.dataset.theme;
-  else document.documentElement.dataset.theme = t;
-}
-
 /** El rango no puede empezar antes del historial que permite el plan. */
 function recortarRango(r: Rango, minimo: string | null): Rango {
   if (!minimo) return r;
@@ -133,25 +133,56 @@ function recortarRango(r: Rango, minimo: string | null): Rango {
   return { desde, hasta };
 }
 
-export default function App() {
-  const yo = useApi<Yo>('/api/yo');
+/**
+ * Cierra la sesión en el servidor, borra lo que no debe quedar en un equipo compartido, avisa a las demás pestañas y
+ * recarga en la raíz (sin hash) para que "Atrás" no muestre datos (RF-34, RF-37, H22).
+ */
+async function cerrarSesion() {
+  try {
+    await enviarJson('POST', '/api/auth/logout');
+  } catch {
+    /* se sale igual */
+  }
+  limpiarAlmacenamientoDeSesion();
+  anunciarCierre();
+  location.replace('/');
+}
 
-  if (yo.error && !yo.data) return <div className="pantalla-centro"><div className="error">No se pudo cargar el panel: {yo.error}</div></div>;
-  if (!yo.data) return <div className="pantalla-centro"><div className="cargando">Cargando…</div></div>;
-  if (!yo.data.habilitado) {
+function PantallaSimple({ children }: { children: React.ReactNode }) {
+  return <div className="pantalla-centro">{children}</div>;
+}
+
+export default function App() {
+  const { estado, recargar, reiniciar, aAnonimo } = useYo();
+
+  // El tema guardado se aplica antes de pintar el acceso (H15).
+  useEffect(() => aplicarTema(leerTema()), []);
+  // Cerrar sesión en una pestaña cierra las demás del mismo navegador (RF-37).
+  useEffect(() => alCerrarEnOtraPestana(aAnonimo), [aAnonimo]);
+
+  if (estado.tipo === 'cargando') return <PantallaSimple><div className="cargando">Cargando…</div></PantallaSimple>;
+  if (estado.tipo === 'anonimo') return <Acceso onEntrar={reiniciar} />;
+  if (estado.tipo === 'error') return <PantallaSimple><div className="error">No se pudo cargar el panel: {estado.mensaje}</div></PantallaSimple>;
+
+  const yo = estado.yo;
+  const conSesion = yo.autenticacion === 'sesion';
+  if (yo.debeCambiar) return <CambioObligatorio usuario={yo.usuario ?? ''} onListo={recargar} onSalir={cerrarSesion} />;
+  if (!yo.habilitado) {
     return (
-      <div className="pantalla-centro">
+      <PantallaSimple>
         <section className="card" style={{ maxWidth: 460 }}>
           <h3>Centro de Orientación · Panel de reportes</h3>
-          <p>{yo.data.mensaje}</p>
-          {yo.data.usuario && <p className="ayuda">Usuario: {yo.data.usuario}</p>}
+          <p>{yo.mensaje}</p>
+          {yo.usuario && <p className="ayuda">Usuario: {yo.usuario}</p>}
+          {conSesion && <button className="boton" onClick={cerrarSesion}>Cerrar sesión</button>}
         </section>
-      </div>
+      </PantallaSimple>
     );
   }
   return (
-    <AccesoCtx.Provider value={yo.data}>
-      <Panel yo={yo.data} />
+    <AccesoCtx.Provider value={yo}>
+      <Panel yo={yo} />
+      {yo.sesion && <AvisoInactividad inactividadMin={yo.sesion.inactividadMin} onSalir={cerrarSesion} />}
     </AccesoCtx.Provider>
   );
 }
@@ -161,7 +192,7 @@ const GRUPOS: { clave: string; titulo: string; paginas: string[] }[] = [
   { clave: 'direccion', titulo: 'Ver el estado de la IPS', paginas: ['resumen', 'alertas', 'informe', 'semanal', 'inteligencia'] },
   { clave: 'operacion', titulo: 'Gestionar la operación', paginas: ['mi-agenda', 'agenda', 'capacidad', 'profesionales', 'lista-espera'] },
   { clave: 'relacion', titulo: 'Pacientes y comunicación', paginas: ['pacientes', 'campanas', 'envios', 'chatbot', 'conversaciones', 'marketing'] },
-  { clave: 'cuenta', titulo: 'Cuenta y sistema', paginas: ['plan', 'soporte'] },
+  { clave: 'cuenta', titulo: 'Cuenta y sistema', paginas: ['cuenta', 'plan', 'soporte'] },
 ];
 
 /** Vista por defecto según el rol: decide qué grupo va primero en el menú. */
@@ -208,7 +239,7 @@ function EstadoConexion() {
 
 function Panel({ yo }: { yo: Yo }) {
   const [estado, setEstado] = useState<Estado>(leerUrl);
-  const [tema, setTema] = useState<Tema>(() => (leerAlmacen('panel.tema') as Tema) || 'auto');
+  const [tema, setTema] = useState<Tema>(leerTema);
   const [refresco, setRefresco] = useState(0);
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [recientes, setRecientes] = useState<string[]>(() => leerLista('panel.recientes'));
@@ -219,7 +250,8 @@ function Panel({ yo }: { yo: Yo }) {
   const esSoporte = yo.rolReal === 'soporte';
   const soporte = useApi<{ n: number; altas: number }>(esSoporte ? '/api/soporte/conteo' : null, 60_000);
 
-  const estadoPagina = (ruta: string) => (ruta === 'soporte' ? (esSoporte ? 'ok' : 'oculta') : yo.paginas[ruta]?.estado ?? 'oculta');
+  const estadoPagina = (ruta: string) =>
+    ruta === 'soporte' ? (esSoporte ? 'ok' : 'oculta') : ruta === 'cuenta' ? (yo.autenticacion === 'sesion' ? 'ok' : 'oculta') : yo.paginas[ruta]?.estado ?? 'oculta';
   const visibles = PAGINAS.filter((p) => estadoPagina(p.ruta) !== 'oculta');
   const rutaInicio = visibles.find((p) => p.ruta === yo.inicio)?.ruta ?? visibles[0]?.ruta ?? 'plan';
   const ruta = estado.ruta && estadoPagina(estado.ruta) !== 'oculta' ? estado.ruta : rutaInicio;
@@ -372,6 +404,11 @@ function Panel({ yo }: { yo: Yo }) {
             )}
             {yo.paginas.plan?.estado === 'ok' && (
               <a href={`#/plan${sufijo}`} className="enlace-plan">Plan {yo.nivelNombre}</a>
+            )}
+            {yo.autenticacion === 'sesion' && (
+              <button className="boton boton-salir" onClick={cerrarSesion}>
+                <Icono nombre="salir" tam={15} /> Cerrar sesión
+              </button>
             )}
           </div>
         </nav>

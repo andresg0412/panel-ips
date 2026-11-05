@@ -1,37 +1,35 @@
 import Fastify from 'fastify';
+import fastifyCookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pool, poolApp } from './db.js';
-import { ErrorParametro } from './params.js';
 import { incidentes, recargarIncidentes } from './incidentes.js';
 import { prepararEsquema } from './esquema.js';
-import { instalarAcceso, registrarError } from './acceso.js';
+import { instalarAcceso } from './acceso.js';
+import { manejarError } from './errores.js';
+import { instalarCabeceras } from './cabeceras.js';
+import { modoAuth, validarConfiguracion } from './auth/configuracion.js';
+import { precalentarContrasenas } from './auth/contrasenas.js';
 import { instalarRecortes } from './recortes.js';
 import { recargarOcultos } from './ocultos.js';
 
+// Configuración de autenticación: si falta algo, el proceso NO arranca (H6, H24). Es mejor un contenedor caído
+// que un panel abierto. Solo se informa QUÉ variable falta, nunca su valor.
+try {
+  validarConfiguracion();
+} catch (e) {
+  console.error(`Configuración inválida del panel: ${(e as Error).message}`);
+  process.exit(1);
+}
+
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, trustProxy: true });
 
-app.setErrorHandler((err, req, reply) => {
-  if (err instanceof ErrorParametro) return reply.code(400).send({ error: err.message });
-  const e = err as { code?: string; message: string; validation?: unknown; statusCode?: number };
-  if (e.validation) return reply.code(400).send({ error: `Datos inválidos: ${e.message}` });
-  if (e.statusCode && e.statusCode >= 400 && e.statusCode < 500) return reply.code(e.statusCode).send({ error: e.message });
-  // 57014 = statement_timeout de Postgres.
-  if (e.code === '57014') {
-    req.log.warn({ url: req.url }, 'consulta cancelada por tiempo');
-    registrarError('timeout');
-    return reply.code(503).send({ error: 'La consulta tardó demasiado. Pruebe con un rango de fechas más corto.' });
-  }
-  if (e.code === 'ECONNREFUSED' || e.code === '57P03' || e.code === 'ENOTFOUND') {
-    registrarError('bd');
-    return reply.code(503).send({ error: 'La base de datos no está disponible en este momento (posible despliegue en curso).' });
-  }
-  req.log.error(err);
-  registrarError('interno');
-  return reply.code(500).send({ error: 'Error interno del panel' });
-});
+app.setErrorHandler(manejarError);
+
+await app.register(fastifyCookie);
+instalarCabeceras(app);
 
 // Esquema propio del panel e incidentes de datos, antes de cargar las rutas: sql.ts arma sus rangos de
 // incidentes al importarse.
@@ -39,8 +37,14 @@ try {
   await prepararEsquema((m) => app.log.info(m));
   await recargarIncidentes();
 } catch (e) {
+  // Con login propio, un esquema sin preparar deja sin tablas de sesión: el panel no debe quedar abierto (H7).
+  if (modoAuth() === 'sesion') {
+    app.log.error(e, 'no se pudo preparar el esquema panel; se detiene el panel');
+    process.exit(1);
+  }
   app.log.error(e, 'no se pudo preparar el esquema panel; se usan los incidentes base');
 }
+void precalentarContrasenas();
 
 // Identidades ocultas (ocultos.ts): antes de atender, y luego cada 10 minutos. Si fallara, el panel arranca sin
 // ocultar nada y lo registra; no se bloquea el arranque.
@@ -71,7 +75,7 @@ const rutas = [
   './routes/listaEspera.js', './routes/pacientes.js', './routes/sistema.js', './routes/profesionales.js',
   './routes/alertas.js', './routes/campanas2.js', './routes/oleada2.js', './routes/soporte.js', './routes/sala.js',
   './routes/historias.js', './routes/capacidad.js', './routes/informe.js', './routes/inteligencia.js',
-  './routes/envios.js', './routes/conversaciones.js',
+  './routes/envios.js', './routes/conversaciones.js', './routes/auth.js',
 ];
 for (const r of rutas) await app.register((await import(r)).default);
 

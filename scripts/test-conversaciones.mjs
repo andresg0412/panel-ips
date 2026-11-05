@@ -118,7 +118,19 @@ await nivel('full');
 await recargarOcultos();
 
 // ---------------------------------------------------------------------------------------------- servidor
+// Con el login propio la identidad sale SOLO de la cookie de sesión: se crea una sesión por usuario de prueba
+// (directo en la base, como hace server/scripts/sesion-verificacion.ts) y `get()` envía su cookie.
+const { createHash, randomBytes } = await import('node:crypto');
+const { default: fastifyCookie } = await import('@fastify/cookie');
+const cookies = {};
+for (const u of ['t_dir', 't_ana', 't_rel', 't_ope', 't_pro', 't_sop']) {
+  const token = randomBytes(32).toString('base64url');
+  await poolApp.query(`INSERT INTO panel.sesiones (token_hash, usuario, expira_at) VALUES ($1, $2, now() + interval '12 hours')`, [createHash('sha256').update(token).digest(), u]);
+  cookies[u] = `panel_sesion=${token}`;
+}
+
 const app = Fastify();
+await app.register(fastifyCookie);
 app.setErrorHandler((err, _req, reply) => {
   if (err instanceof ErrorParametro) return reply.code(400).send({ error: err.message });
   const e = err;
@@ -140,7 +152,7 @@ const check = (etiqueta, condicion) => {
   assert.ok(condicion, etiqueta);
   comprobaciones.push(etiqueta);
 };
-const get = (usuario, url) => app.inject({ method: 'GET', url, headers: usuario ? { 'x-remote-user': usuario } : {} });
+const get = (usuario, url) => app.inject({ method: 'GET', url, headers: usuario ? { cookie: cookies[usuario] } : {} });
 const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 const actividadMia = async (usuario, patron) =>
   (await poolApp.query(`SELECT * FROM panel.actividad WHERE usuario = $1 AND ruta LIKE $2`, [usuario, patron])).rows;
@@ -158,7 +170,7 @@ const volcarActividad = async () => {
     }
   }
   const sinUsuario = await get(null, '/api/conversaciones');
-  check('sin usuario → 403', sinUsuario.statusCode === 403);
+  check('sin sesión → 401', sinUsuario.statusCode === 401);
 
   await nivel('intermedio');
   for (const url of ['/api/conversaciones', `/api/conversaciones/${TA}/mensajes`]) {
