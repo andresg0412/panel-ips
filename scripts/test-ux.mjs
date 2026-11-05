@@ -54,6 +54,7 @@ check('Conversaciones: sondeo cada 3 s (chat) y 10 s (lista), detenido con la pe
 check('Conversaciones: backoff ante errores y una petición a la vez con AbortController', conversaciones.includes('Math.min(30_000, baseMs * 2 ** fallos)') && conversaciones.includes('new AbortController()'));
 check('Conversaciones: indicador En vivo / Reconectando / En pausa', conversaciones.includes('En vivo') && conversaciones.includes('Reconectando') && conversaciones.includes('En pausa'));
 check('Conversaciones: botón flotante de mensajes nuevos en vez de saltar al final', conversaciones.includes('mensaje') && conversaciones.includes('conv-nuevos') && conversaciones.includes('estaAbajo()'));
+check('Conversaciones: subir a leer no se revierte con los sondeos', conversaciones.includes('irAbajo.current = estaAbajo();') && conversaciones.includes('cambioEstado ? conEstados : actuales'));
 check('Conversaciones: carga de historial anterior conservando la posición', conversaciones.includes('antes_id') && conversaciones.includes('alturaPrevia'));
 check('Conversaciones: horas en America/Bogota', conversaciones.includes("BOGOTA = 'America/Bogota'"));
 check('Conversaciones: aviso legal con los días de conservación', conversaciones.includes('contienen datos personales y de salud') && conversaciones.includes('Su consulta queda registrada'));
