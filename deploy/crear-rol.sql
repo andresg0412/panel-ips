@@ -26,3 +26,17 @@ GRANT SELECT ON horariosequipo, chat_stats TO panel_lectura;
 
 -- Etapa 1 (2026-10-04): el vigilante de soporte revisa la tabla de migraciones del backend.
 GRANT SELECT ON migrations TO panel_lectura;
+
+-- Historial de conversaciones (migración 045 del backend, 2026-10-29). Esquema aparte de `bi` a propósito: contiene el
+-- TEXTO de los mensajes de los pacientes. Solo vistas (historial.v_mensajes, historial.v_conversaciones); la tabla base
+-- no se concede. La migración 045 ya hace estos GRANT si el rol existe; se repiten aquí para entornos nuevos donde el
+-- rol se crea DESPUÉS de la migración.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'historial') THEN
+    GRANT USAGE ON SCHEMA historial TO panel_lectura;
+    GRANT SELECT ON ALL TABLES IN SCHEMA historial TO panel_lectura;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA historial GRANT SELECT ON TABLES TO panel_lectura;
+  END IF;
+END
+$$;

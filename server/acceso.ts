@@ -186,11 +186,16 @@ export interface Evaluacion {
   nivel: Nivel;
 }
 
+/** Historial de conversaciones encendido en ESTE panel (PANEL_CONVERSACIONES_ENABLED=true). Apagado, nadie salvo soporte lo ve. */
+export const conversacionesHabilitadas = () => process.env.PANEL_CONVERSACIONES_ENABLED === 'true';
+
 export function evaluar(ctx: Contexto, clave: string): Evaluacion {
   const f = funcion(clave);
   if (!f) return { ok: false, motivo: 'rol', nivel: 'full' };
-  // El soporte sin vista previa lo ve todo.
+  // El soporte sin vista previa lo ve todo (también lo que aún no está habilitado, para poder probarlo).
   if (ctx.rolReal === 'soporte' && !ctx.vistaPrevia) return { ok: true, nivel: f.nivel };
+  // Función aún no habilitada: se comporta como un rol sin acceso (la página no aparece en el menú y la API responde 403).
+  if (f.clave === 'conversaciones.ver' && !conversacionesHabilitadas()) return { ok: false, motivo: 'rol', nivel: f.nivel };
   const rol = ctx.rol;
   const rolOk = !!rol && (f.pagina === null || ROLES[rol].paginas.includes(f.pagina)) && (!f.roles || f.roles.includes(rol));
   if (!rolOk) return { ok: false, motivo: 'rol', nivel: f.nivel };
@@ -235,6 +240,10 @@ const pendientes: FilaActividad[] = [];
 const MAX_PENDIENTES = 2_000;
 // Consultas que se repiten solas (el menú, cada minuto) y no dicen nada del uso.
 const SIN_REGISTRO = new Set(['GET /api/health', 'GET /api/alertas/conteo', 'GET /api/soporte/conteo']);
+// Historial de conversaciones: los sondeos (cada 3 a 10 s) no se registran cuando salen bien; llenarían panel.actividad.
+// Lo que sí queda es la APERTURA de una conversación (la registra la propia ruta, con el teléfono) y cualquier intento
+// fallido o denegado (status >= 400).
+const SIN_REGISTRO_SI_OK = new Set(['GET /api/conversaciones', 'GET /api/conversaciones/cursor', 'GET /api/conversaciones/:telefono/mensajes']);
 
 export function registrarActividad(ctx: Contexto | undefined, fila: Omit<FilaActividad, 'usuario' | 'rol' | 'vista_previa'>) {
   if (!poolApp) return;
@@ -352,6 +361,7 @@ export function instalarAcceso(app: FastifyInstance) {
     if (!req.url.startsWith('/api/') || !req.routeOptions.url) return;
     const clave = `${req.method} ${req.routeOptions.url}`;
     if (SIN_REGISTRO.has(clave) || clave === 'POST /api/actividad') return;
+    if (SIN_REGISTRO_SI_OK.has(clave) && reply.statusCode < 400) return;
     const q = req.query as Record<string, unknown>;
     const personal = ENDPOINTS[clave] === 'exportar.personales' || (clave === 'GET /api/campanas/envios' && Number(q.tam) > TAM_MAX_SIN_EXPORTAR);
     if (personal && reply.statusCode === 200) {
