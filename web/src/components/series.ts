@@ -146,6 +146,54 @@ export function barrasApiladas(periodos: string[], series: Record<string, number
   return sombrear(opt, periodos, g, sombras);
 }
 
+/** Una fila del comparativo de periodos: la misma clave en el mes A y en el mes B (null si no está en uno). */
+export interface FilaUnida<F> {
+  clave: string;
+  a: F | null;
+  b: F | null;
+}
+
+/**
+ * Une por clave las filas de los dos meses. Una clave que solo aparece en un mes se conserva (con el otro lado en
+ * null): un profesional o un convenio que dejó de aparecer también es información. Orden: más peso en A primero y,
+ * a igual peso, más peso en B.
+ */
+export function unirPorClave<F>(a: F[], b: F[], clave: (f: F) => string | number, peso: (f: F) => number): FilaUnida<F>[] {
+  const filas = new Map<string, FilaUnida<F>>();
+  for (const f of a) filas.set(String(clave(f)), { clave: String(clave(f)), a: f, b: null });
+  for (const f of b) {
+    const k = String(clave(f));
+    filas.set(k, { clave: k, a: filas.get(k)?.a ?? null, b: f });
+  }
+  const pesoDe = (f: F | null) => (f ? peso(f) : 0);
+  return [...filas.values()].sort((x, y) => pesoDe(y.a) - pesoDe(x.a) || pesoDe(y.b) - pesoDe(x.b));
+}
+
+export interface SerieComparada {
+  nombre: string;
+  valores: number[];
+}
+
+/** Barras agrupadas de dos meses por categoría: el mes A con el color principal y el B en gris neutro. */
+export function barrasComparadas(categorias: string[], mesA: SerieComparada, mesB: SerieComparada): EChartsCoreOption {
+  const ejes = base() as Record<string, any>;
+  return {
+    ...ejes,
+    tooltip: { ...ejes.tooltip, trigger: 'axis', axisPointer: { type: 'shadow' }, valueFormatter: (v: number) => num(v) },
+    xAxis: { ...ejes.xAxis, type: 'category', data: categorias },
+    yAxis: { ...ejes.yAxis, type: 'value' },
+    series: [mesA, mesB].map((serie, i) => ({
+      name: serie.nombre,
+      type: 'bar',
+      barMaxWidth: 28,
+      barGap: '10%',
+      data: serie.valores,
+      itemStyle: { color: token(i === 0 ? 's1' : 's-other'), borderRadius: [4, 4, 0, 0] },
+      emphasis: { focus: 'series' },
+    })),
+  };
+}
+
 /** Líneas por período (2 px, marcadores solo al pasar el cursor). `pct` formatea el eje y el tooltip como %. */
 export function lineas(
   periodos: string[],

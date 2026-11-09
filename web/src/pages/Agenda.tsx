@@ -6,21 +6,11 @@ import { Estado, Kpi, ListaConteo, Tabla, Tarjeta, type Columna } from '../compo
 import { DIAS, etiqueta, fecha, fechaHora, hora, pct } from '../format';
 import { Pestanas, useMarcas, usePestana, useSombras } from '../incidentes';
 import { Bloqueado, Restringido, useAcceso } from '../acceso';
+import { canceladasPct, cumplimiento, esperadas, tasa, type PorEstado } from '../metricas';
 import { AgendaProximas, AnticipacionCancelaciones } from './Ocupacion';
 import { AgendaCalidad, AgendaInasistencia, AgendaTendencias } from './AgendaAnalisis';
+import AgendaComparativo from './AgendaComparativo';
 
-interface PorEstado {
-  nombre?: string;
-  dia?: number;
-  total: number;
-  asistio: number;
-  no_asistio: number;
-  canceladas: number;
-  reprogramadas: number;
-  programadas: number;
-  sin_cierre?: number;
-  horas_no_ocurrieron?: number;
-}
 interface Cambio {
   cuando: string;
   estado_anterior: string | null;
@@ -45,11 +35,6 @@ interface Datos {
 
 // Mismo orden que los colores fijos (s1..s5): evita que el amarillo quede junto al naranja.
 const GRUPOS = ['Asistió', 'Cancelada', 'Reprogramada', 'No asistió', 'Programada', 'Sin cierre', 'Otro'];
-const tasa = (f: PorEstado) => (f.asistio + f.no_asistio ? f.asistio / (f.asistio + f.no_asistio) : null);
-// D11: cumplimiento = asistió ÷ (asistió + no asistió + canceladas); canceladas % sobre la misma base.
-const esperadas = (f: PorEstado) => f.asistio + f.no_asistio + f.canceladas;
-const cumplimiento = (f: PorEstado) => (esperadas(f) ? f.asistio / esperadas(f) : null);
-const canceladasPct = (f: PorEstado) => (esperadas(f) ? f.canceladas / esperadas(f) : null);
 
 const colsEstado = (titulo: string): Columna<PorEstado>[] => [
   { clave: 'nombre', titulo },
@@ -113,16 +98,17 @@ const COLS_CAMBIO: Columna<Cambio>[] = [
   { clave: 'origen', titulo: 'Origen', formato: etiqueta, csv: etiqueta },
 ];
 
-type Vista = 'periodo' | 'proximas' | 'inasistencia' | 'tendencias' | 'calidad';
+type Vista = 'periodo' | 'proximas' | 'inasistencia' | 'tendencias' | 'comparativo' | 'calidad';
 
 export default function Agenda({ rango }: { rango: Rango }) {
-  const [vista, setVista] = usePestana<Vista>(['periodo', 'proximas', 'inasistencia', 'tendencias', 'calidad'], 'periodo');
+  const [vista, setVista] = usePestana<Vista>(['periodo', 'proximas', 'inasistencia', 'tendencias', 'comparativo', 'calidad'], 'periodo');
   const { puede } = useAcceso();
   const FUNCION: Record<Vista, [string, string]> = {
     periodo: ['agenda.periodo', 'Citas del período'],
     proximas: ['agenda.proximas', 'Próximas semanas'],
     inasistencia: ['agenda.inasistencia', 'Inasistencia'],
     tendencias: ['agenda.tendencias', 'Tendencias'],
+    comparativo: ['agenda.comparativo', 'Comparativo de periodos'],
     calidad: ['agenda.calidad', 'Calidad de los datos'],
   };
   const bloqueadas = (Object.keys(FUNCION) as Vista[]).filter((v) => !puede(FUNCION[v][0]));
@@ -135,6 +121,7 @@ export default function Agenda({ rango }: { rango: Rango }) {
           ['proximas', '¿Qué viene próximamente?'],
           ['inasistencia', '¿Dónde están faltando?'],
           ['tendencias', '¿Cómo está cambiando?'],
+          ['comparativo', '¿Cómo vamos frente a otro mes?'],
           ['calidad', '¿Hay problemas en los datos?'],
         ]}
         descripciones={{
@@ -142,6 +129,7 @@ export default function Agenda({ rango }: { rango: Rango }) {
           proximas: 'Aquí puede anticipar la demanda y las citas programadas para las próximas semanas.',
           inasistencia: 'Identifique los días y horarios donde más pacientes dejan de asistir.',
           tendencias: 'Compare la evolución de la agenda y la asistencia a lo largo del tiempo.',
+          comparativo: 'Compare un mes contra el anterior, contra el mismo mes del año pasado o contra otro mes que elija.',
           calidad: 'Revise cambios, registros pendientes y señales que pueden afectar la interpretación.',
         }}
         valor={vista}
@@ -152,6 +140,7 @@ export default function Agenda({ rango }: { rango: Rango }) {
       {!bloqueadas.includes(vista) && vista === 'proximas' && <AgendaProximas />}
       {!bloqueadas.includes(vista) && vista === 'inasistencia' && <AgendaInasistencia rango={rango} />}
       {!bloqueadas.includes(vista) && vista === 'tendencias' && <AgendaTendencias />}
+      {!bloqueadas.includes(vista) && vista === 'comparativo' && <AgendaComparativo />}
       {!bloqueadas.includes(vista) && vista === 'calidad' && <AgendaCalidad />}
     </>
   );

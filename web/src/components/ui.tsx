@@ -99,41 +99,65 @@ export function BloqueDetalle({ titulo, resumen, children, abierto = false }: {
   );
 }
 
+/** Diferencia entre dos valores de una métrica, con la clase de color que le corresponde. */
+export interface Delta {
+  /** actual − anterior; en puntos porcentuales si la métrica es una tasa. */
+  absoluta: number;
+  /** Cambio relativo (0,08 = +8 %); null si la base es 0 o si la métrica es una tasa. */
+  relativa: number | null;
+  flecha: '▲' | '▼' | '=';
+  /** 'up' mejora, 'down' empeora, '' sin cambio o métrica neutra (`mejorSiSube` null). */
+  clase: 'up' | 'down' | '';
+}
+
+/**
+ * Compara `actual` con `anterior`. Una tasa ('pct', en proporción 0–1) se compara en puntos porcentuales; un
+ * conteo o promedio ('num'), en valor absoluto y relativo. Cambios menores a 0,05 pts o 0,5 % no pintan color.
+ */
+export function calcularDelta(actual: number, anterior: number, formato: 'num' | 'pct', mejorSiSube: boolean | null): Delta {
+  const esTasa = formato === 'pct';
+  const absoluta = esTasa ? (actual - anterior) * 100 : actual - anterior;
+  const relativa = esTasa || anterior <= 0 ? null : (actual - anterior) / anterior;
+  const cambio = esTasa ? absoluta : (relativa ?? absoluta);
+  const sinCambio = esTasa ? Math.abs(cambio) < 0.05 : relativa !== null && Math.abs(cambio) < 0.005;
+  const clase = sinCambio || mejorSiSube === null ? '' : (cambio > 0) === mejorSiSube ? 'up' : 'down';
+  return { absoluta, relativa, flecha: cambio > 0 ? '▲' : cambio < 0 ? '▼' : '=', clase };
+}
+
 /**
  * Indicador con comparación contra el período anterior.
- * `mejorSiSube=false` para métricas donde subir es malo (cancelaciones, abandono).
+ * `mejorSiSube=false` para métricas donde subir es malo (cancelaciones, abandono); `null` si es neutra.
  */
-export function Kpi({ etiqueta, valor, actual, anterior, mejorSiSube = true, formato = 'num', comparacion = 'vs período anterior', meta, ayuda }: {
+export function Kpi({ etiqueta, valor, actual, anterior, mejorSiSube = true, formato = 'num', comparacion = 'vs período anterior', sinComparacion, meta, ayuda }: {
   etiqueta: string;
   /** Definición de la métrica (se muestra en la "i"). */
   ayuda?: string;
   valor?: string;
   actual: number | null;
   anterior?: number | null;
-  mejorSiSube?: boolean;
+  mejorSiSube?: boolean | null;
   formato?: 'num' | 'pct';
   /** Texto de la comparación, p. ej. 'vs mismo período de 2025'. */
   comparacion?: string;
+  /** Texto que reemplaza a la diferencia cuando no se puede comparar (p. ej. 'pocos datos'). */
+  sinComparacion?: string;
   /** Meta: muestra un indicador (✓ cumple / ! cerca / ✕ lejos). Para pct, en proporción (0,92). */
   meta?: { valor: number; mejorSiSube?: boolean };
 }) {
   const mostrar = valor ?? (actual === null ? '—' : formato === 'pct' ? `${(actual * 100).toFixed(1).replace('.', ',')} %` : num(actual));
-  let delta: ReactNode = <span className="delta">&nbsp;</span>;
-  if (anterior !== undefined && anterior !== null && actual !== null) {
+  let delta: ReactNode = <span className="delta">{sinComparacion ?? <>&nbsp;</>}</span>;
+  if (!sinComparacion && anterior !== undefined && anterior !== null && actual !== null) {
+    const d = calcularDelta(actual, anterior, formato, mejorSiSube);
     if (formato === 'pct') {
-      const pp = (actual - anterior) * 100;
-      const clase = Math.abs(pp) < 0.05 ? '' : (pp > 0) === mejorSiSube ? 'up' : 'down';
       delta = (
-        <span className={`delta ${clase}`}>
-          {pp > 0 ? '▲' : pp < 0 ? '▼' : '='} {Math.abs(pp).toFixed(1).replace('.', ',')} pts {comparacion}
+        <span className={`delta ${d.clase}`}>
+          {d.flecha} {Math.abs(d.absoluta).toFixed(1).replace('.', ',')} pts {comparacion}
         </span>
       );
-    } else if (anterior > 0) {
-      const cambio = (actual - anterior) / anterior;
-      const clase = Math.abs(cambio) < 0.005 ? '' : (cambio > 0) === mejorSiSube ? 'up' : 'down';
+    } else if (d.relativa !== null) {
       delta = (
-        <span className={`delta ${clase}`}>
-          {cambio > 0 ? '▲' : cambio < 0 ? '▼' : '='} {Math.abs(cambio * 100).toFixed(0)} % {comparacion} ({num(anterior)})
+        <span className={`delta ${d.clase}`}>
+          {d.flecha} {Math.abs(d.relativa * 100).toFixed(0)} % {comparacion} ({num(anterior)})
         </span>
       );
     } else {
@@ -206,6 +230,8 @@ export interface Columna<T> {
   envolver?: boolean;
   /** Solo para la pantalla (botones): no sale en el CSV. */
   sinCsv?: boolean;
+  /** Empieza oculta: se puede mostrar con "Elegir columnas" y siempre sale en el CSV. */
+  oculta?: boolean;
 }
 
 function aCsv<T>(filas: T[], columnas: Columna<T>[]): string {
@@ -242,7 +268,7 @@ export function Tabla<T extends Record<string, any>>({ filas, columnas, nombreCs
   const [orden, setOrden] = useState<{ col: number; asc: boolean } | null>(null);
   const [mostrarTodas, setMostrarTodas] = useState(false);
   const [selectorAbierto, setSelectorAbierto] = useState(false);
-  const [columnasVisibles, setColumnasVisibles] = useState<number[]>(() => columnas.map((_, i) => i));
+  const [columnasVisibles, setColumnasVisibles] = useState<number[]>(() => columnas.flatMap((c, i) => (c.oculta ? [] : [i])));
   const { puede, visible, nivelDe, nombreNivel } = useAcceso();
   const columnasActivas = columnas.filter((_, i) => columnasVisibles.includes(i));
   // El selector de columnas solo aporta en tablas anchas; en las cortas sería un botón más sin uso.

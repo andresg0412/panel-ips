@@ -71,6 +71,7 @@ export const FUNCIONES: Funcion[] = [
   { clave: 'agenda.tendencias', pagina: 'agenda', nivel: 'intermedio', titulo: 'Tendencias: cancelación, teleconsulta, convenios y días de espera' },
   { clave: 'agenda.calidad', pagina: 'agenda', nivel: 'intermedio', titulo: 'Calidad de los datos de la agenda' },
   { clave: 'agenda.proximas', pagina: 'agenda', nivel: 'full', titulo: 'Proyección de las próximas semanas' },
+  { clave: 'agenda.comparativo', pagina: 'agenda', nivel: 'full', titulo: 'Comparativo de periodos: un mes contra otro' },
 
   { clave: 'capacidad.cancelaciones', pagina: 'capacidad', nivel: 'intermedio', titulo: 'Cupos que se liberan por cancelaciones y reprogramaciones' },
   { clave: 'capacidad.modalidad', pagina: 'capacidad', nivel: 'intermedio', titulo: 'Presencial frente a virtual' },
@@ -105,6 +106,7 @@ export const FUNCIONES: Funcion[] = [
   { clave: 'profesionales.ficha', pagina: 'profesionales', nivel: 'intermedio', titulo: 'Ficha detallada de cada profesional' },
   { clave: 'profesionales.ocupacion', pagina: 'profesionales', nivel: 'intermedio', titulo: 'Ocupación de la agenda' },
   { clave: 'profesionales.capacidad', pagina: 'profesionales', nivel: 'full', titulo: 'Cupos libres de los próximos 14 días y retención por profesional' },
+  { clave: 'profesionales.comparativo', pagina: 'profesionales', nivel: 'full', titulo: 'Comparativo de periodos por profesional' },
 
   { clave: 'campanas.resultados', pagina: 'campanas', nivel: 'basico', titulo: 'Mensajes enviados y resultados por campaña' },
   // Recorte dentro de GET /api/campanas (nivel Básico): lectura y respuesta de los pacientes.
@@ -132,6 +134,7 @@ export const FUNCIONES: Funcion[] = [
   { clave: 'pacientes.perfil', pagina: 'pacientes', nivel: 'intermedio', titulo: 'Tiempo entre citas y perfil de los pacientes atendidos' },
   { clave: 'pacientes.retencion', pagina: 'pacientes', nivel: 'intermedio', titulo: 'Retención, cohortes y pacientes en riesgo' },
   { clave: 'pacientes.buscar', pagina: 'pacientes', nivel: 'intermedio', titulo: 'Búsqueda y ficha de un paciente', roles: ['direccion', 'analista', 'relacion'] },
+  { clave: 'pacientes.comparativo', pagina: 'pacientes', nivel: 'full', titulo: 'Comparativo de periodos de pacientes' },
 
   { clave: 'listaEspera.inscritos', pagina: 'lista-espera', nivel: 'basico', titulo: 'Inscritos activos en la lista de espera' },
   { clave: 'listaEspera.detalle', pagina: 'lista-espera', nivel: 'intermedio', titulo: 'Cupos recuperados, ofertas y motivos' },
@@ -221,6 +224,7 @@ export const ENDPOINTS: Record<string, string> = {
   'GET /api/agenda/historico': 'agenda.tendencias',
   'GET /api/agenda/calidad': 'agenda.calidad',
   'GET /api/agenda/proximas': 'agenda.proximas',
+  'GET /api/agenda/comparativo': 'agenda.comparativo',
 
   'GET /api/capacidad': 'capacidad.centro',
   'GET /api/capacidad/recuperables': 'capacidad.recuperables',
@@ -234,6 +238,8 @@ export const ENDPOINTS: Record<string, string> = {
   'GET /api/profesionales': 'profesionales.lista',
   'GET /api/profesionales/ficha': 'profesionales.ficha',
   'GET /api/profesionales/ocupacion': 'profesionales.ocupacion',
+  'GET /api/profesionales/comparativo': 'profesionales.comparativo',
+  'GET /api/profesionales/comparativo/ficha': 'profesionales.comparativo',
 
   'GET /api/campanas': 'campanas.resultados',
   'GET /api/campanas/envios': 'campanas.detalle',
@@ -258,6 +264,7 @@ export const ENDPOINTS: Record<string, string> = {
   'GET /api/pacientes/ciclo': 'pacientes.retencion',
   'GET /api/pacientes/en-riesgo': 'exportar.personales',
   'GET /api/pacientes/buscar': 'pacientes.buscar',
+  'GET /api/pacientes/comparativo': 'pacientes.comparativo',
   'GET /api/pacientes/:id': 'pacientes.buscar',
 
   'GET /api/lista-espera': 'listaEspera.inscritos',

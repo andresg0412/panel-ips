@@ -1,8 +1,9 @@
 import type { FastifyInstance } from 'fastify';
-import { query } from '../db.js';
+import { query, queryOne } from '../db.js';
 import { conCache } from '../cache.js';
 import { claveCache } from '../acceso.js';
 import { leerRango } from '../params.js';
+import { avisosSinCierre, resolverComparativo, ttlComparativo } from '../comparativo.js';
 import { CITAS, HOY, MESES, NOSHOW, PERIODOS, periodo } from '../sql.js';
 
 // Asistencia = asistió / (asistió + no asistió). Las canceladas y reprogramadas no cuentan
@@ -17,6 +18,56 @@ const COLUMNAS_ESTADO = `
   count(*) FILTER (WHERE grupo = 'Sin cierre') AS sin_cierre`;
 
 const EN_RANGO = `es_cita_paciente AND fecha_cita BETWEEN $1 AND $2`;
+
+// AGE-02: duración de las citas que no ocurrieron (canceladas y reprogramadas), en horas.
+const HORAS_NO_OCURRIERON = `
+  round(sum(extract(epoch FROM (hora_final - hora_cita)) / 3600.0)
+        FILTER (WHERE grupo IN ('Cancelada', 'Reprogramada') AND hora_final > hora_cita)::numeric, 0) AS horas_no_ocurrieron`;
+
+// Agrupaciones de las citas por estado. Las comparten `/api/agenda` (periodo elegido) y el comparativo de
+// periodos: así una misma definición da las mismas cifras en las dos pantallas.
+const DESGLOSES = {
+  especialidad: {
+    campo: 'nombre',
+    expresion: `CASE WHEN especialidad IN ('Psicología', 'Psiquiatría', 'Neuropsicología') THEN especialidad ELSE 'Otra' END`,
+    orden: '2 DESC',
+    extra: '',
+  },
+  profesional: { campo: 'nombre', expresion: `coalesce(nullif(profesional_nombre, ''), 'Sin profesional')`, orden: '2 DESC', extra: '' },
+  administradora: { campo: 'nombre', expresion: 'administradora_n', orden: '2 DESC', extra: '' },
+  diaSemana: { campo: 'dia', expresion: 'dia', orden: '1', extra: '' },
+  servicio: { campo: 'nombre', expresion: 'tipo_servicio', orden: '2 DESC', extra: `, ${HORAS_NO_OCURRIERON}` },
+};
+
+/** Citas de pacientes por estado, agrupadas según `DESGLOSES`; `limite` (opcional) deja solo las primeras filas. */
+function desglose(clave: keyof typeof DESGLOSES, desde: string, hasta: string, limite?: number) {
+  const d = DESGLOSES[clave];
+  return query(
+    `WITH ${CITAS}
+     SELECT ${d.expresion} AS ${d.campo}, ${COLUMNAS_ESTADO}${d.extra}
+       FROM citas WHERE ${EN_RANGO}
+      GROUP BY 1 ORDER BY ${d.orden}${limite ? ` LIMIT ${limite}` : ''}`,
+    [desde, hasta],
+  );
+}
+
+/** Indicadores de la agenda de un periodo, sin límites de filas: la base de cada lado del comparativo. */
+async function metricasAgenda(desde: string, hasta: string) {
+  const [totales, especialidad, profesional, administradora, servicio, diaSemana] = await Promise.all([
+    queryOne<{ total: number; sin_cierre: number }>(
+      `WITH ${CITAS}
+       SELECT ${COLUMNAS_ESTADO}, ${HORAS_NO_OCURRIERON}
+         FROM citas WHERE ${EN_RANGO}`,
+      [desde, hasta],
+    ),
+    desglose('especialidad', desde, hasta),
+    desglose('profesional', desde, hasta),
+    desglose('administradora', desde, hasta),
+    desglose('servicio', desde, hasta),
+    desglose('diaSemana', desde, hasta),
+  ]);
+  return { totales, especialidad, profesional, administradora, servicio, diaSemana };
+}
 
 /** Inasistencia por una dimensión de la CTE `citas`, solo en períodos confiables (AGE-01). */
 const noshowPor = (expr: string) => `
@@ -43,35 +94,10 @@ export default async function rutasAgenda(app: FastifyInstance) {
             ORDER BY 1`,
           [...p, r.grano],
         ),
-        query(
-          `WITH ${CITAS}
-           SELECT CASE WHEN especialidad IN ('Psicología', 'Psiquiatría', 'Neuropsicología') THEN especialidad ELSE 'Otra' END AS nombre,
-                  ${COLUMNAS_ESTADO}
-             FROM citas WHERE ${EN_RANGO}
-            GROUP BY 1 ORDER BY 2 DESC`,
-          p,
-        ),
-        query(
-          `WITH ${CITAS}
-           SELECT coalesce(nullif(profesional_nombre, ''), 'Sin profesional') AS nombre, ${COLUMNAS_ESTADO}
-             FROM citas WHERE ${EN_RANGO}
-            GROUP BY 1 ORDER BY 2 DESC LIMIT 40`,
-          p,
-        ),
-        query(
-          `WITH ${CITAS}
-           SELECT administradora_n AS nombre, ${COLUMNAS_ESTADO}
-             FROM citas WHERE ${EN_RANGO}
-            GROUP BY 1 ORDER BY 2 DESC LIMIT 15`,
-          p,
-        ),
-        query(
-          `WITH ${CITAS}
-           SELECT dia, ${COLUMNAS_ESTADO}
-             FROM citas WHERE ${EN_RANGO}
-            GROUP BY 1 ORDER BY 1`,
-          p,
-        ),
+        desglose('especialidad', r.desde, r.hasta),
+        desglose('profesional', r.desde, r.hasta, 40),
+        desglose('administradora', r.desde, r.hasta, 15),
+        desglose('diaSemana', r.desde, r.hasta),
         query(
           `WITH ${CITAS}
            SELECT coalesce(origen_cancelacion, 'sin_registro') AS origen, count(*) AS n
@@ -90,18 +116,28 @@ export default async function rutasAgenda(app: FastifyInstance) {
           p,
         ),
         // AGE-02 por tipo de servicio: cuánto no ocurrió de cada servicio.
-        query(
-          `WITH ${CITAS}
-           SELECT tipo_servicio AS nombre, ${COLUMNAS_ESTADO},
-                  round(sum(extract(epoch FROM (hora_final - hora_cita)) / 3600.0)
-                        FILTER (WHERE grupo IN ('Cancelada', 'Reprogramada') AND hora_final > hora_cita)::numeric, 0) AS horas_no_ocurrieron
-             FROM citas WHERE ${EN_RANGO}
-            GROUP BY 1 ORDER BY 2 DESC`,
-          p,
-        ),
+        desglose('servicio', r.desde, r.hasta),
       ]);
       return { rango: r, serie, especialidad, profesional, administradora, diaSemana, origenCancelacion, cambios, servicio };
     });
+  });
+
+  // Comparativo de periodos: los indicadores de la agenda de dos meses, uno al lado del otro.
+  // Diseño: proyecto-ips/docs/features/2026-11-09-comparativo-periodos-panel.md, sección 4.2.
+  app.get('/api/agenda/comparativo', async (req) => {
+    const c = resolverComparativo(req.query as Record<string, unknown>, req.contexto!);
+    return conCache(
+      claveCache(req),
+      async () => {
+        const [a, b] = await Promise.all([metricasAgenda(c.a.desde, c.a.hasta), metricasAgenda(c.b.desde, c.b.hasta)]);
+        const avisos = avisosSinCierre([
+          { periodo: c.a, sinCierre: a.totales.sin_cierre, total: a.totales.total },
+          { periodo: c.b, sinCierre: b.totales.sin_cierre, total: b.totales.total },
+        ]);
+        return { comparativo: { ...c, avisos: [...c.avisos, ...avisos] }, a, b };
+      },
+      ttlComparativo(c),
+    );
   });
 
   // AGE-01: mapa de la inasistencia en el rango elegido (solo días confiables; el panel oculta n < 30).

@@ -2,8 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../db.js';
 import { conCache } from '../cache.js';
 import { claveCache } from '../acceso.js';
-import { leerRango, sumarDias, type Rango } from '../params.js';
-import { incidentes } from '../incidentes.js';
+import { INICIO_DATOS, leerRango, sumarDias, type Rango } from '../params.js';
+import { fraccionEnIncidente } from '../incidentes.js';
 import { CITAS, MESES, PERIODOS, periodo } from '../sql.js';
 
 // Conversación fuera del horario de recepción: antes de las 7, desde las 19 o en domingo.
@@ -69,20 +69,6 @@ export async function indicadores(desde: string, hasta: string) {
   ]);
   return { citas, envios, sesiones, listaEspera };
 }
-
-/** Fracción de días del rango que cae en un incidente que afecta a las métricas del resumen. */
-export function fraccionEnIncidente(desde: string, hasta: string): number {
-  const inc = incidentes().filter((i) => i.area !== 'trazabilidad');
-  let total = 0;
-  let malos = 0;
-  for (let d = desde; d <= hasta; d = sumarDias(d, 1)) {
-    total++;
-    if (inc.some((i) => d >= i.desde && d <= i.hasta)) malos++;
-  }
-  return total ? malos / total : 0;
-}
-
-const INICIO_DATOS = '2025-08-01';
 
 /**
  * Con qué se compara el período (TR-01): el período anterior si es confiable; si más del 30 % cae en un

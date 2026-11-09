@@ -3,6 +3,7 @@ import { useApi, type Rango } from '../api';
 import { Pestanas, usePestana } from '../incidentes';
 import { Bloqueado, useAcceso } from '../acceso';
 import PacientesPanorama from './PacientesPanorama';
+import PacientesComparativo from './PacientesComparativo';
 import PacientesRetencion from './PacientesRetencion';
 import { Estado, Tabla, Tarjeta, type Columna } from '../components/ui';
 import { etiqueta, fecha, fechaHora, hora } from '../format';
@@ -60,9 +61,10 @@ const CAMPOS: [string, string][] = [
 
 export default function Pacientes({ rango }: { rango: Rango }) {
   const { puede, visible } = useAcceso();
-  type V = 'panorama' | 'retencion' | 'buscar';
+  type V = 'panorama' | 'comparativo' | 'retencion' | 'buscar';
   const FUNCION: Record<V, [string, string]> = {
     panorama: ['pacientes.panorama', '¿Cómo es nuestra población?'],
+    comparativo: ['pacientes.comparativo', '¿Cómo cambió nuestra población?'],
     retencion: ['pacientes.retencion', '¿Quiénes necesitan volver?'],
     buscar: ['pacientes.buscar', '¿Cómo encuentro un paciente?'],
   };
@@ -76,6 +78,7 @@ export default function Pacientes({ rango }: { rango: Rango }) {
         opciones={opciones.map((v) => [v, FUNCION[v][1]])}
         descripciones={{
           panorama: 'Entienda quiénes son sus pacientes, cuántos llegan y cada cuánto regresan.',
+          comparativo: 'Compare cuántos pacientes atendió, cuántos fueron nuevos y su perfil entre dos meses.',
           retencion: 'Identifique pacientes que podrían necesitar una invitación para volver.',
           buscar: 'Busque un paciente y consulte su información según sus permisos.',
         }}
@@ -85,6 +88,7 @@ export default function Pacientes({ rango }: { rango: Rango }) {
       />
       {bloqueadas.includes(vista) && <Bloqueado clave={FUNCION[vista][0]} titulo={FUNCION[vista][1]} alto={280} />}
       {!bloqueadas.includes(vista) && vista === 'panorama' && <PacientesPanorama rango={rango} />}
+      {!bloqueadas.includes(vista) && vista === 'comparativo' && <PacientesComparativo />}
       {!bloqueadas.includes(vista) && vista === 'retencion' && <PacientesRetencion />}
       {!bloqueadas.includes(vista) && vista === 'buscar' && <BuscarPaciente />}
     </>

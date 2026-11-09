@@ -414,6 +414,68 @@ process.env.PANEL_CONVERSACIONES_ENABLED = 'true';
   for (const rol of ['analista', 'relacion', 'profesional']) check(`Anular cupo: ${rol} no`, evaluar(ctx(rol, 'full'), 'listaEspera.anular').motivo === 'rol');
 }
 
+/** 'YYYY-MM' de hace `n` meses respecto al mes actual de Bogotá. */
+function mesMasAtras(n) {
+  const [a, m] = hoyBogota().slice(0, 7).split('-').map(Number);
+  return new Date(Date.UTC(a, m - 1 - n, 1)).toISOString().slice(0, 7);
+}
+
+// Comparativo de periodos (proyecto-ips/docs/features/2026-11-09-comparativo-periodos-panel.md, secciones 5.2, 7.1 y 7.2):
+// solo plan Full en Agenda, Profesionales y Pacientes; y un mes fuera del historial del plan se rechaza con 402.
+{
+  const { FUNCIONES, ENDPOINTS } = await import('../server/funciones.ts');
+  const { evaluar, historialDesde } = await import('../server/acceso.ts');
+  const { resolverComparativo } = await import('../server/comparativo.ts');
+  const { manejarError } = await import('../server/errores.ts');
+  const { default: Fastify } = await import('fastify');
+  const ctx = (rol, nivel, extra = {}) => ({ usuario: 'prueba', rolReal: rol, nivelReal: nivel, rol, nivel, vistaPrevia: false, historialDesde: null, habilitado: true, ...extra });
+  const FUNCIONES_CMP = { 'agenda.comparativo': 'agenda', 'profesionales.comparativo': 'profesionales', 'pacientes.comparativo': 'pacientes' };
+
+  for (const [clave, pagina] of Object.entries(FUNCIONES_CMP)) {
+    const f = FUNCIONES.find((x) => x.clave === clave);
+    check(`Comparativo: "${clave}" es de nivel Full, de la página ${pagina} y sin restricción de rol`, f?.nivel === 'full' && f.pagina === pagina && !f.roles);
+    for (const nivel of ['basico', 'intermedio']) {
+      const ev = evaluar(ctx('direccion', nivel), clave);
+      check(`Comparativo: Dirección en ${nivel} → candado (402, plan Full) en ${clave}`, !ev.ok && ev.motivo === 'nivel' && ev.nivel === 'full');
+    }
+    check(`Comparativo: Dirección en Full → permitido en ${clave}`, evaluar(ctx('direccion', 'full'), clave).ok);
+    check(`Comparativo: el rol Profesional no ve ${clave}`, evaluar(ctx('profesional', 'full'), clave).motivo === 'rol');
+  }
+  check('Comparativo: Analista y Operación ven Agenda; Analista y Relación ven Pacientes', evaluar(ctx('analista', 'full'), 'agenda.comparativo').ok && evaluar(ctx('operacion', 'full'), 'agenda.comparativo').ok && evaluar(ctx('relacion', 'full'), 'pacientes.comparativo').ok);
+  check('Comparativo: Relación no ve Profesionales', evaluar(ctx('relacion', 'full'), 'profesionales.comparativo').motivo === 'rol');
+
+  const rutasCmp = {
+    'GET /api/agenda/comparativo': 'agenda.comparativo',
+    'GET /api/profesionales/comparativo': 'profesionales.comparativo',
+    'GET /api/profesionales/comparativo/ficha': 'profesionales.comparativo',
+    'GET /api/pacientes/comparativo': 'pacientes.comparativo',
+  };
+  check('Comparativo: las 4 rutas exigen su función', Object.entries(rutasCmp).every(([ruta, clave]) => ENDPOINTS[ruta] === clave));
+
+  // El recorte automático de acceso.ts solo mira desde/hasta: aquí se comprueba, con el manejador de errores real,
+  // que un mes anterior al historial del plan responde 402 en vez de compararse recortado.
+  const app = Fastify();
+  app.setErrorHandler(manejarError);
+  app.addHook('onRequest', async (req) => {
+    const nivel = req.headers['x-nivel'];
+    req.contexto = ctx('direccion', nivel, { historialDesde: historialDesde(nivel) });
+  });
+  app.get('/api/agenda/comparativo', async (req) => resolverComparativo(req.query, req.contexto));
+  await app.ready();
+  const mesActual = hoyBogota().slice(0, 7);
+  const hacerPeticion = (nivel, query) => app.inject({ method: 'GET', url: `/api/agenda/comparativo?${new URLSearchParams(query)}`, headers: { 'x-nivel': nivel } });
+
+  const fuera = await hacerPeticion('intermedio', { modo: 'libre', mesA: mesActual, mesB: '2025-08', corte: 'completo' });
+  check('Comparativo: un mes fuera del historial (365 días) responde 402 con codigo "historial"', fuera.statusCode === 402 && fuera.json().codigo === 'historial' && fuera.json().nivel === 'full');
+  const fueraBasico = await hacerPeticion('basico', { mesA: mesMasAtras(4), modo: 'mes_anterior', corte: 'completo' });
+  check('Comparativo: con historial de 90 días, comparar un mes de hace 4 meses responde 402', fueraBasico.statusCode === 402 && fueraBasico.json().codigo === 'historial');
+  const dentro = await hacerPeticion('full', { modo: 'libre', mesA: mesActual, mesB: '2025-08', corte: 'completo' });
+  check('Comparativo: en Full, sin límite de historial, el mismo pedido responde 200', dentro.statusCode === 200 && dentro.json().b.mes === '2025-08');
+  const invalida = await hacerPeticion('full', { mesA: 'abc' });
+  check('Comparativo: un mes con formato inválido responde 400 (no 500)', invalida.statusCode === 400);
+  await app.close();
+}
+
 for (const a of advertencias) console.warn(`  ⚠ ${a}`);
 console.log(`Niveles: ${comprobaciones.length} comprobaciones OK${advertencias.length ? ` (${advertencias.length} advertencias)` : ''}`);
 process.exit(0);

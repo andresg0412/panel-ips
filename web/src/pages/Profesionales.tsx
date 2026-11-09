@@ -3,8 +3,9 @@ import { conRango, useApi, type Rango } from '../api';
 import Grafico from '../components/Grafico';
 import { barrasApiladas, barrasTasa, ranking } from '../components/series';
 import { Estado, Kpi, Tabla, Tarjeta, type Columna } from '../components/ui';
-import { useMarcas, useSombras } from '../incidentes';
+import { Pestanas, useMarcas, usePestana, useSombras } from '../incidentes';
 import OcupacionProfesionales from './Ocupacion';
+import ProfesionalesComparativo from './ProfesionalesComparativo';
 import { Bloqueado, Restringido, useAcceso } from '../acceso';
 import { DIAS, etiqueta, num, pct, ratio } from '../format';
 
@@ -67,7 +68,34 @@ const COLUMNAS: Columna<FilaProfesional>[] = [
   },
 ];
 
+type Vista = 'lista' | 'comparativo';
+
 export default function Profesionales({ rango }: { rango: Rango }) {
+  const [vista, setVista] = usePestana<Vista>(['lista', 'comparativo'], 'lista');
+  const { puede } = useAcceso();
+  const comparativoBloqueado = !puede('profesionales.comparativo');
+  return (
+    <>
+      <Pestanas<Vista>
+        opciones={[
+          ['lista', '¿Cómo está cada profesional?'],
+          ['comparativo', '¿Cómo cambió cada profesional?'],
+        ]}
+        descripciones={{
+          lista: 'Agenda, asistencia y continuidad de cada profesional en el período seleccionado.',
+          comparativo: 'Compare lo que atendió cada profesional en un mes contra otro mes.',
+        }}
+        bloqueadas={comparativoBloqueado ? ['comparativo'] : []}
+        valor={vista}
+        onCambio={setVista}
+      />
+      {vista === 'lista' && <ListaProfesionales rango={rango} />}
+      {vista === 'comparativo' && (comparativoBloqueado ? <Bloqueado clave="profesionales.comparativo" titulo="¿Cómo cambió cada profesional?" alto={280} /> : <ProfesionalesComparativo />)}
+    </>
+  );
+}
+
+function ListaProfesionales({ rango }: { rango: Rango }) {
   const lista = useApi<{ filas: FilaProfesional[] }>(conRango('/api/profesionales', rango), 120_000);
   const [elegido, setElegido] = useState<string | null>(null);
   const { puede } = useAcceso();

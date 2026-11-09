@@ -3,9 +3,79 @@ import { query, queryOne } from '../db.js';
 import { conCache } from '../cache.js';
 import { claveCache } from '../acceso.js';
 import { ErrorParametro, leerRango, leerTexto } from '../params.js';
+import { resolverComparativo, ttlComparativo, type Periodo } from '../comparativo.js';
 import { CITAS, MESES } from '../sql.js';
 
 const ID = /^[A-Za-z0-9]{1,16}$/;
+
+/** Perfil de los pacientes atendidos en el periodo (pacientes distintos, no citas), según su última cita atendida. */
+function perfilPacientes(desde: string, hasta: string) {
+  return query(
+    `WITH ${CITAS},
+     pac AS (
+       SELECT DISTINCT ON (paciente_id) paciente_id, rango_edad, coalesce(nullif(trim(regimen), ''), 'sin_dato') AS regimen,
+              administradora_n, tipo_pago, modalidad, especialidad
+         FROM citas
+        WHERE es_cita_paciente AND grupo = 'Asistió' AND fecha_cita BETWEEN $1 AND $2 AND paciente_id IS NOT NULL
+        ORDER BY paciente_id, fecha_cita DESC
+     )
+     SELECT 'edad' AS dimension, rango_edad AS clave, count(*) AS n FROM pac GROUP BY 2
+     UNION ALL SELECT 'regimen', regimen, count(*) FROM pac GROUP BY 2
+     UNION ALL SELECT 'pago', tipo_pago, count(*) FROM pac GROUP BY 2
+     UNION ALL SELECT 'modalidad', modalidad, count(*) FROM pac GROUP BY 2
+     UNION ALL SELECT 'especialidad', especialidad, count(*) FROM pac GROUP BY 2`,
+    [desde, hasta],
+  );
+}
+
+interface ResumenPacientes {
+  atendidos: number;
+  nuevos: number | null;
+  recurrentes: number | null;
+  atendidas: number;
+  con_inasistencia: number;
+}
+
+/**
+ * Pacientes atendidos en el periodo y cuántos son nuevos o recurrentes (PAC-01). La primera atención se busca en
+ * todo el historial, no solo en el periodo. En el primer mes con datos todos parecen nuevos (es la carga inicial),
+ * así que ahí no se informa la división.
+ */
+async function resumenPacientes(p: Periodo): Promise<ResumenPacientes> {
+  const params = [p.desde, p.hasta];
+  const [atendidos, inasistencia] = await Promise.all([
+    queryOne<Omit<ResumenPacientes, 'con_inasistencia'>>(
+      `WITH ${CITAS},
+       at AS (
+         SELECT paciente_id, fecha_cita, min(fecha_cita) OVER (PARTITION BY paciente_id) AS primera
+           FROM citas WHERE es_cita_paciente AND grupo = 'Asistió' AND paciente_id IS NOT NULL
+       )
+       SELECT count(DISTINCT paciente_id) AS atendidos,
+              count(DISTINCT paciente_id) FILTER (WHERE primera >= $1) AS nuevos,
+              count(DISTINCT paciente_id) FILTER (WHERE primera < $1) AS recurrentes,
+              count(*) AS atendidas
+         FROM at WHERE fecha_cita BETWEEN $1 AND $2`,
+      params,
+    ),
+    queryOne<{ n: number }>(
+      `WITH ${CITAS}
+       SELECT count(DISTINCT paciente_id) AS n
+         FROM citas
+        WHERE es_cita_paciente AND grupo = 'No asistió' AND fecha_cita BETWEEN $1 AND $2 AND paciente_id IS NOT NULL`,
+      params,
+    ),
+  ]);
+  return {
+    ...atendidos,
+    ...(p.cargaInicial ? { nuevos: null, recurrentes: null } : {}),
+    con_inasistencia: inasistencia.n,
+  };
+}
+
+async function pacientesDelPeriodo(p: Periodo) {
+  const [resumen, perfil] = await Promise.all([resumenPacientes(p), perfilPacientes(p.desde, p.hasta)]);
+  return { resumen, perfil };
+}
 
 export default async function rutasPacientes(app: FastifyInstance) {
   // Panorama de pacientes: PAC-01 (nuevos y recurrentes), PAC-03 (tiempo entre citas), PAC-05 (perfil).
@@ -37,22 +107,7 @@ export default async function rutasPacientes(app: FastifyInstance) {
              FROM at WHERE dias > 0 GROUP BY 1 ORDER BY 1`,
         ),
         // Perfil de los pacientes atendidos en el rango (pacientes distintos, no citas).
-        query(
-          `WITH ${CITAS},
-           pac AS (
-             SELECT DISTINCT ON (paciente_id) paciente_id, rango_edad, coalesce(nullif(trim(regimen), ''), 'sin_dato') AS regimen,
-                    administradora_n, tipo_pago, modalidad, especialidad
-               FROM citas
-              WHERE es_cita_paciente AND grupo = 'Asistió' AND fecha_cita BETWEEN $1 AND $2 AND paciente_id IS NOT NULL
-              ORDER BY paciente_id, fecha_cita DESC
-           )
-           SELECT 'edad' AS dimension, rango_edad AS clave, count(*) AS n FROM pac GROUP BY 2
-           UNION ALL SELECT 'regimen', regimen, count(*) FROM pac GROUP BY 2
-           UNION ALL SELECT 'pago', tipo_pago, count(*) FROM pac GROUP BY 2
-           UNION ALL SELECT 'modalidad', modalidad, count(*) FROM pac GROUP BY 2
-           UNION ALL SELECT 'especialidad', especialidad, count(*) FROM pac GROUP BY 2`,
-          [r.desde, r.hasta],
-        ),
+        perfilPacientes(r.desde, r.hasta),
         queryOne(
           `WITH ${CITAS},
            at AS (
@@ -68,6 +123,21 @@ export default async function rutasPacientes(app: FastifyInstance) {
       ]);
       return { mensual, intervalos, perfil, resumenIntervalos };
     }, 300_000);
+  });
+
+  // Comparativo de periodos: pacientes atendidos, nuevos, recurrentes y perfil de dos meses. Solo agregados.
+  // Se registra antes de `/api/pacientes/:id`, para que "comparativo" nunca se lea como un id.
+  // Diseño: proyecto-ips/docs/features/2026-11-09-comparativo-periodos-panel.md, sección 4.4.
+  app.get('/api/pacientes/comparativo', async (req) => {
+    const c = resolverComparativo(req.query as Record<string, unknown>, req.contexto!);
+    return conCache(
+      claveCache(req),
+      async () => {
+        const [a, b] = await Promise.all([pacientesDelPeriodo(c.a), pacientesDelPeriodo(c.b)]);
+        return { comparativo: c, a, b };
+      },
+      ttlComparativo(c),
+    );
   });
 
   // Búsqueda por documento exacto, por teléfono (últimos dígitos) o por nombre (mínimo 3 letras).

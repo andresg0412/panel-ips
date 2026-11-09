@@ -2,7 +2,17 @@ const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 const DIA_MS = 86_400_000;
 const MAX_DIAS = 800;
 
+/** Primer día con datos en el panel (la carga inicial de Globho). */
+export const INICIO_DATOS = '2025-08-01';
+
 export class ErrorParametro extends Error {}
+
+/** Lo pedido queda fuera del historial que incluye el plan: se responde 402, nunca se recorta en silencio. */
+export class ErrorHistorialPlan extends Error {
+  constructor(mensaje: string, readonly nivel: 'full') {
+    super(mensaje);
+  }
+}
 
 export interface Rango {
   desde: string;
