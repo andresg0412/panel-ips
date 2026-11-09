@@ -12,6 +12,7 @@ export function ratio(parte: number, total: number): number | null {
 }
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const MESES_LARGOS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
 /** 'YYYY-MM-DD' → '4 oct 2026' */
 export function fecha(v: unknown): string {
@@ -32,6 +33,12 @@ export function fechaCorta(v: unknown): string {
 export function mesCorto(v: unknown): string {
   const [a, m] = String(v).split('-').map(Number);
   return m ? `${MESES[m - 1]} ${String(a).slice(2)}` : String(v);
+}
+
+/** 'YYYY-MM' → 'octubre 2026' (o 'oct 2026' si es corto) */
+export function nombreMes(mes: string, corto = false): string {
+  const [a, m] = mes.split('-').map(Number);
+  return m ? `${(corto ? MESES : MESES_LARGOS)[m - 1]} ${a}` : mes;
 }
 
 /** Proporción → '12,3 %' */

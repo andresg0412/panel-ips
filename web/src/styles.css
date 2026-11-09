@@ -682,3 +682,12 @@ button.enlace:disabled { opacity: 0.5; cursor: default; }
   .ventana-acciones .boton { flex: 1; }
 }
 @media print { .ventana-velo { display: none !important; } }
+
+/* Comparativo de periodos */
+.rango button:disabled { opacity: 0.5; cursor: default; }
+.comparativo-filtros { align-items: center; margin: 12px 0 0; }
+.comparativo-filtros label { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); font-size: 13px; }
+.comparativo-base { color: var(--muted); font-size: 13px; }
+.delta-celda.up { color: var(--up); }
+.delta-celda.down { color: var(--down); }
+.delta-celda.apagado { color: var(--muted); }

@@ -27,6 +27,7 @@ import { aplicarTema, leerTema, type Tema } from './tema';
 import { IncidentesCtx, type Incidente } from './incidentes';
 import { AccesoCtx, Bloqueado, Candado, type Yo } from './acceso';
 import { fecha } from './format';
+import { PARAMS_COMPARATIVO } from './comparativo';
 import Campanita from './components/Campanita';
 import { Icono } from './components/iconos';
 
@@ -117,10 +118,16 @@ function leerUrl(): Estado {
 
 function escribirUrl(e: Estado) {
   if (!e.ruta) return;
-  const pestana = new URLSearchParams(location.hash.split('?')[1] ?? '').get('t');
-  const [rutaActual] = location.hash.replace(/^#\/?/, '').split('?');
-  const t = pestana && rutaActual === e.ruta ? `&t=${pestana}` : '';
-  const q = (e.preset === 'custom' ? `desde=${e.rango.desde}&hasta=${e.rango.hasta}` : `p=${e.preset}`) + t;
+  const [rutaActual, consultaActual = ''] = location.hash.replace(/^#\/?/, '').split('?');
+  const actual = new URLSearchParams(consultaActual);
+  const q = new URLSearchParams(e.preset === 'custom' ? { desde: e.rango.desde, hasta: e.rango.hasta } : { p: e.preset });
+  // La pestaña y los meses del comparativo pertenecen a la pantalla: se conservan mientras no se cambie de pantalla.
+  if (rutaActual === e.ruta) {
+    for (const clave of ['t', ...PARAMS_COMPARATIVO]) {
+      const valor = actual.get(clave);
+      if (valor) q.set(clave, valor);
+    }
+  }
   const hash = `#/${e.ruta}?${q}`;
   if (location.hash !== hash) history.replaceState(null, '', hash);
 }

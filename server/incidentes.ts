@@ -3,6 +3,7 @@
 // en la consola de soporte; esta lista es la carga inicial y el respaldo si esa tabla no responde.
 // Fechas en hora de Bogotá, ambas inclusive. Fuente: docs/catalogo-analitica.md, hallazgo D1.
 import { poolApp } from './db.js';
+import { sumarDias } from './params.js';
 
 export type AreaIncidente = 'general' | 'agenda' | 'whatsapp' | 'conversaciones' | 'eventos' | 'trazabilidad';
 
@@ -75,4 +76,16 @@ export async function recargarIncidentes(): Promise<void> {
     `SELECT area, desde::text AS desde, hasta::text AS hasta, titulo, descripcion FROM panel.incidentes ORDER BY desde, id`,
   );
   actuales = rows;
+}
+
+/** Fracción de días del rango (de 0 a 1) que cae en un incidente que afecta a las métricas del resumen. */
+export function fraccionEnIncidente(desde: string, hasta: string): number {
+  const inc = incidentes().filter((i) => i.area !== 'trazabilidad');
+  let total = 0;
+  let malos = 0;
+  for (let d = desde; d <= hasta; d = sumarDias(d, 1)) {
+    total++;
+    if (inc.some((i) => d >= i.desde && d <= i.hasta)) malos++;
+  }
+  return total ? malos / total : 0;
 }

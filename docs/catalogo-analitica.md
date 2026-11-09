@@ -749,6 +749,16 @@ Ficha resumida: **Pregunta / Audiencia / Pantalla**, **Métrica**, **Fuente**, *
 
 ---
 
+### 3.10 Comparativo de periodos (Agenda, Profesionales y Pacientes)
+
+Pestaña "Comparativo de periodos" en las tres pantallas, solo plan Full. Compara dos **meses calendario**. Diseño: `proyecto-ips/docs/features/2026-11-09-comparativo-periodos-panel.md`.
+
+- **CMP-01 Periodos.** Modos: `mes_anterior` (A y el mes previo), `interanual` (A y el mismo mes un año antes) y `libre` (dos meses cualesquiera). El servidor calcula el mes B; el navegador no calcula fechas. Corte `mismo_dia`: se compara solo hasta el día de ayer (Bogotá) en cada mes, y es el valor por defecto cuando A es el mes en curso; `completo` usa el mes entero. Con el mes en curso y corte completo, los totales de ese mes están incompletos. Validaciones: formato `AAAA-MM`, sin meses futuros, sin meses anteriores a ago-2025 y sin meses fuera del historial del plan (402, nunca se recorta en silencio). Avisos que no bloquean: carga inicial (ago-2025), incidente (más del 30 % del mes) o incidente parcial, mes en curso completo, citas sin cierre (más del 5 %) y meses de distinta duración.
+- **CMP-02 Agenda.** Mismas fórmulas y consultas que `/api/agenda`: citas, atendidas, no asistieron, canceladas, reprogramadas, programadas, sin cierre, asistencia a citas realizadas (AGE), cumplimiento de agenda y canceladas % (D11) y horas de consulta perdidas (canceladas + reprogramadas). Desgloses por especialidad, profesional, convenio (los 15 con más citas entre los dos meses), tipo de atención y día de la semana.
+- **CMP-03 Profesionales.** Por profesional normalizado: citas, atendidas, asistencia, no ocurrieron % (canceladas + reprogramadas sobre el total), pacientes atendidos y pacientes nuevos (primera atención histórica dentro del mes y con ese profesional). Aparece quien tuvo citas en cualquiera de los dos meses. No incluye la retención a 90 días (PRO-04): sus cohortes no son mensuales.
+- **CMP-04 Pacientes.** Atendidos (pacientes distintos con una cita atendida), nuevos y recurrentes como en PAC-01 (la primera atención se busca en todo el historial), % de nuevos, citas atendidas por paciente, pacientes con alguna inasistencia y perfil (edad, régimen, pago, modalidad y especialidad según la última cita atendida del mes). En ago-2025 no se informa la división nuevos/recurrentes.
+- **CMP-05 Reglas de diferencia.** Conteos: diferencia absoluta y relativa (si el mes B es 0, la relativa es "—"). Tasas: puntos porcentuales; si la base de la tasa es menor de 30 en cualquiera de los dos meses, se muestra "pocos datos" y no se calcula la diferencia. Promedios: diferencia con un decimal. Los porcentajes los calcula el navegador a partir de conteos. El color sigue si subir es bueno o malo para cada métrica; las métricas neutras no llevan color.
+
 ## 4. Datos que van a llegar y cómo se activan en el panel
 
 | Fuente o bandera | Estado hoy | Habilita | Datos útiles desde | Mientras tanto |
