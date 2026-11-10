@@ -18,6 +18,7 @@ import MiPlan from './pages/MiPlan';
 import Soporte from './pages/Soporte';
 import Envios from './pages/Envios';
 import Conversaciones from './pages/Conversaciones';
+import Facturacion from './pages/Facturacion';
 import Acceso from './pages/Acceso';
 import CambioObligatorio from './pages/CambioObligatorio';
 import MiCuenta from './pages/MiCuenta';
@@ -56,6 +57,7 @@ const PAGINAS: Pagina[] = [
   { ruta: 'conversaciones', titulo: 'Conversaciones', desc: 'Historial de mensajes del chatbot, casi en tiempo real (solo lectura)', Comp: Conversaciones, conRango: false, funcion: 'conversaciones.ver' },
   { ruta: 'lista-espera', titulo: 'Lista de espera', desc: 'Inscripciones, cupos liberados y ofertas', Comp: ListaEspera, conRango: true, funcion: 'listaEspera.inscritos' },
   { ruta: 'pacientes', titulo: 'Pacientes', desc: 'Quiénes son, cuántos llegan y cada cuánto vuelven', Comp: Pacientes, conRango: true, funcion: 'pacientes.panorama' },
+  { ruta: 'facturacion', titulo: 'Facturación', desc: 'Ventas por día, servicio, convenio y método de pago', Comp: Facturacion, conRango: true, funcion: 'facturacion.diario' },
   { ruta: 'marketing', titulo: 'Marketing', desc: 'Alcance de WhatsApp y pacientes para invitar a volver', Comp: Marketing, conRango: false, funcion: 'marketing.alcance' },
   { ruta: 'alertas', titulo: 'Alertas', desc: 'Lo que requiere atención y la salud de los datos', Comp: Alertas, conRango: true, funcion: 'alertas.panel' },
   { ruta: 'cuenta', titulo: 'Mi cuenta', desc: 'Sus datos, su contraseña y las sesiones abiertas de su cuenta', Comp: MiCuenta, conRango: false, funcion: '' },
@@ -199,6 +201,7 @@ const GRUPOS: { clave: string; titulo: string; paginas: string[] }[] = [
   { clave: 'direccion', titulo: 'Ver el estado de la IPS', paginas: ['resumen', 'alertas', 'informe', 'semanal', 'inteligencia'] },
   { clave: 'operacion', titulo: 'Gestionar la operación', paginas: ['mi-agenda', 'agenda', 'capacidad', 'profesionales', 'lista-espera'] },
   { clave: 'relacion', titulo: 'Pacientes y comunicación', paginas: ['pacientes', 'campanas', 'envios', 'chatbot', 'conversaciones', 'marketing'] },
+  { clave: 'finanzas', titulo: 'Finanzas', paginas: ['facturacion'] },
   { clave: 'cuenta', titulo: 'Cuenta y sistema', paginas: ['cuenta', 'plan', 'soporte'] },
 ];
 

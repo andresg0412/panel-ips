@@ -182,4 +182,31 @@ rechaza('B anterior a los datos', { modo: 'libre', mesA: '2026-10', mesB: '2025-
   check('Un periodo sin citas no avisa', avisosSinCierre([{ periodo: c.a, sinCierre: 0, total: 0 }]).length === 0);
 }
 
+// ------------------------------------------------------- primer mes propio (facturación, docs/features/2026-11-09-modulo-facturacion.md, 7.3)
+{
+  const FACTURACION = { primerMes: '2025-10', avisarCargaInicial: false };
+  const conOpciones = (q, opciones = FACTURACION) => resolverComparativo(q, FULL, HOY, opciones);
+
+  const c = conOpciones({ mesA: '2025-11', corte: 'completo' });
+  check('Con primer mes propio, el mes siguiente se compara con el primero', c.b.mes === '2025-10');
+  check('La facturación no marca ningún mes como carga inicial ni avisa de ella', !c.b.cargaInicial && !codigos(c).includes('carga_inicial'));
+
+  try {
+    conOpciones({ mesA: '2025-10' });
+    assert.fail('debía rechazarse');
+  } catch (e) {
+    check('Antes del primer mes propio se rechaza con su fecha', e instanceof ErrorParametro && e.message === 'Los datos empiezan en octubre de 2025');
+  }
+  try {
+    conOpciones({ modo: 'libre', mesA: '2026-10', mesB: '2025-09' });
+    assert.fail('debía rechazarse');
+  } catch (e) {
+    check('Un mes libre anterior al primer mes propio también se rechaza', e instanceof ErrorParametro && e.message === 'Los datos empiezan en octubre de 2025');
+  }
+  check('El interanual funciona desde el primer mes propio', conOpciones({ mesA: '2026-10', modo: 'interanual', corte: 'completo' }).b.mes === '2025-10');
+
+  const porDefecto = resolverComparativo({ mesA: '2025-09', corte: 'completo' }, FULL, HOY);
+  check('Sin opciones sigue valiendo el primer mes de la agenda y su aviso de carga inicial', porDefecto.b.cargaInicial && codigos(porDefecto).includes('carga_inicial'));
+}
+
 console.log(`Comparativo: ${comprobaciones} comprobaciones OK`);

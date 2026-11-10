@@ -4,7 +4,7 @@
 import type { ReactNode } from 'react';
 import { useAcceso } from '../acceso';
 import {
-  hayInteranual, mesAValido, mesActual, mesesDisponibles, mesMas,
+  PRIMER_MES, hayInteranual, mesAValido, mesActual, mesesDisponibles, mesMas,
   type Comparativo, type ControlComparativo, type Modo,
 } from '../comparativo';
 import { nombreMes, num, tasaTxt } from '../format';
@@ -23,10 +23,15 @@ const MODOS: [Modo, string][] = [
 const conInicialMayuscula = (texto: string) => texto.charAt(0).toUpperCase() + texto.slice(1);
 
 // ------------------------------------------------------------------------------------------------ selector
-export function SelectorComparativo({ control, comparativo }: { control: ControlComparativo; comparativo: Comparativo | undefined }) {
+export function SelectorComparativo({ control, comparativo, primerMes = PRIMER_MES }: {
+  control: ControlComparativo;
+  comparativo: Comparativo | undefined;
+  /** Primer mes con datos de la pantalla (por defecto, el de la agenda). */
+  primerMes?: string;
+}) {
   const { yo, nombreNivel } = useAcceso();
   const historialDesde = yo?.historialDesde ?? null;
-  const meses = mesesDisponibles();
+  const meses = mesesDisponibles(primerMes);
 
   /** Los meses que el plan no alcanza se muestran deshabilitados, no se ocultan. */
   const fueraDelPlan = (mes: string) => !!historialDesde && `${mes}-01` < historialDesde;
@@ -42,7 +47,7 @@ export function SelectorComparativo({ control, comparativo }: { control: Control
     <Tarjeta titulo="Meses a comparar" ayuda="Esta vista usa sus propios meses; el rango de fechas de arriba no aplica.">
       <div className="rango" role="group" aria-label="Tipo de comparación">
         {MODOS.map(([modo, texto]) => {
-          const sinDatos = modo === 'interanual' && !hayInteranual(control.mesA);
+          const sinDatos = modo === 'interanual' && !hayInteranual(control.mesA, primerMes);
           return (
             <button
               key={modo}
@@ -61,7 +66,7 @@ export function SelectorComparativo({ control, comparativo }: { control: Control
         <label>
           Mes{' '}
           <select value={control.mesA} onChange={(e) => control.cambiarMesA(e.target.value)}>
-            {meses.map((m) => opcion(m, !mesAValido(control.modo, m)))}
+            {meses.map((m) => opcion(m, !mesAValido(control.modo, m, primerMes)))}
           </select>
         </label>
         {control.modo === 'libre' ? (
@@ -154,7 +159,7 @@ export function DeltaCelda({ motivo, delta, tipo, etiquetaA }: { motivo: Motivo;
 
 // ------------------------------------------------------------------------------------------------ indicadores
 /** Indicador de un mes comparado con el otro. Para una tasa, pasar la base de cada mes (asistió + no asistió, etc.). */
-export function KpiComparado({ etiqueta, a, b, comparativo, formato = 'num', mejorSiSube = null, ayuda, baseA, baseB, valor }: {
+export function KpiComparado({ etiqueta, a, b, comparativo, formato = 'num', formatear, mejorSiSube = null, ayuda, baseA, baseB, valor }: {
   etiqueta: string;
   /** Texto del valor del mes A si no basta el formato por defecto (p. ej. un promedio con un decimal). */
   valor?: string;
@@ -162,6 +167,8 @@ export function KpiComparado({ etiqueta, a, b, comparativo, formato = 'num', mej
   b: number | null;
   comparativo: Comparativo;
   formato?: 'num' | 'pct';
+  /** Cómo se escribe un valor 'num' (por defecto, número con miles; p. ej. `pesos` para importes). */
+  formatear?: (v: number) => string;
   /** null = métrica neutra (sin color). */
   mejorSiSube?: boolean | null;
   ayuda?: string;
@@ -172,7 +179,7 @@ export function KpiComparado({ etiqueta, a, b, comparativo, formato = 'num', mej
   const sinComparacion = pocos
     ? 'pocos datos'
     : formato === 'num' && a !== null && b === 0
-      ? `${conSigno(a, num(a))} · sin datos en ${comparativo.b.etiqueta}`
+      ? `${conSigno(a, (formatear ?? num)(a))} · sin datos en ${comparativo.b.etiqueta}`
       : undefined;
   return (
     <Kpi
@@ -182,6 +189,7 @@ export function KpiComparado({ etiqueta, a, b, comparativo, formato = 'num', mej
       actual={a}
       anterior={b}
       formato={formato}
+      formatear={formatear}
       mejorSiSube={mejorSiSube}
       comparacion={`vs ${nombreMes(comparativo.b.mes, true)}`}
       sinComparacion={sinComparacion}

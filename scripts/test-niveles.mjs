@@ -476,6 +476,60 @@ function mesMasAtras(n) {
   await app.close();
 }
 
+// Facturación (proyecto-ips/docs/features/2026-11-09-modulo-facturacion.md, secciones 7.1 y 12: D5 solo Full, D7 roles):
+// funciones solo del plan Full, visibles para Dirección, Analista y Soporte; y la identidad del paciente enmascarada.
+{
+  const { FUNCIONES, ENDPOINTS, ROLES } = await import('../server/funciones.ts');
+  const { evaluar } = await import('../server/acceso.ts');
+  const { instalarRecortes } = await import('../server/recortes.ts');
+  const { default: Fastify } = await import('fastify');
+  const ctx = (rol, nivel) => ({ usuario: 'prueba', rolReal: rol, nivelReal: nivel, rol, nivel, vistaPrevia: false, historialDesde: null, habilitado: true });
+  const CLAVES = ['facturacion.diario', 'facturacion.desglose', 'facturacion.recaudo', 'facturacion.comparativo'];
+
+  for (const clave of CLAVES) {
+    const f = FUNCIONES.find((x) => x.clave === clave);
+    check(`Facturación: "${clave}" es de nivel Full, de la página facturacion y sin restricción de rol propia`, f?.nivel === 'full' && f.pagina === 'facturacion' && !f.roles);
+    for (const nivel of ['basico', 'intermedio']) {
+      const ev = evaluar(ctx('direccion', nivel), clave);
+      check(`Facturación: Dirección en ${nivel} → candado (plan Full) en ${clave}`, !ev.ok && ev.motivo === 'nivel' && ev.nivel === 'full');
+    }
+    for (const rol of ['direccion', 'analista', 'soporte']) check(`Facturación: ${rol} en Full ve ${clave}`, evaluar(ctx(rol, 'full'), clave).ok);
+    for (const rol of ['operacion', 'relacion', 'profesional']) check(`Facturación: el rol ${rol} no ve ${clave}`, evaluar(ctx(rol, 'full'), clave).motivo === 'rol');
+  }
+  check('Facturación: la página está en Dirección, Analista y Soporte, y en ningún otro rol', ['direccion', 'analista', 'soporte'].every((r) => ROLES[r].paginas.includes('facturacion')) && ['operacion', 'relacion', 'profesional'].every((r) => !ROLES[r].paginas.includes('facturacion')));
+
+  const rutas = {
+    'GET /api/facturacion': 'facturacion.diario',
+    'GET /api/facturacion/estado': 'facturacion.diario',
+    'GET /api/facturacion/desglose': 'facturacion.desglose',
+    'GET /api/facturacion/facturas': 'facturacion.desglose',
+    'GET /api/facturacion/recaudo': 'facturacion.recaudo',
+    'GET /api/facturacion/comparativo': 'facturacion.comparativo',
+  };
+  check('Facturación: las 6 rutas exigen su función', Object.entries(rutas).every(([ruta, clave]) => ENDPOINTS[ruta] === clave));
+
+  // Documento, teléfono y correo del detalle de facturas se enmascaran a quien no tiene datos.identidad. Hoy los roles con
+  // acceso a la página (Dirección, Analista y Soporte) sí la tienen: la prueba usa el rol Operación para comprobar que el
+  // recorte protege a cualquier rol que se agregue a futuro o a una vista previa.
+  const app = Fastify();
+  app.addHook('onRequest', async (req) => {
+    const rol = req.headers['x-rol'];
+    req.contexto = ctx(rol, 'full');
+  });
+  instalarRecortes(app);
+  app.get('/api/facturacion/facturas', async () => ({
+    total: 1,
+    filas: [{ numero_factura: '100', documento_paciente: '1000000001', telefono_paciente: '3000000001', mail_paciente: 'uno@ejemplo.test', nombre_paciente: 'PACIENTE UNO' }],
+  }));
+  await app.ready();
+  const pedir = async (rol) => (await app.inject({ method: 'GET', url: '/api/facturacion/facturas', headers: { 'x-rol': rol } })).json().filas[0];
+  const completa = await pedir('direccion');
+  check('Facturación: Dirección ve el documento, el teléfono y el correo completos', completa.documento_paciente === '1000000001' && completa.telefono_paciente === '3000000001' && completa.mail_paciente === 'uno@ejemplo.test');
+  const oculta = await pedir('operacion');
+  check('Facturación: quien no tiene datos.identidad los ve enmascarados, y el nombre y la factura intactos', oculta.documento_paciente === '10******01' && oculta.telefono_paciente === '30******01' && oculta.mail_paciente === 'u***@ejemplo.test' && oculta.nombre_paciente === 'PACIENTE UNO' && oculta.numero_factura === '100');
+  await app.close();
+}
+
 for (const a of advertencias) console.warn(`  ⚠ ${a}`);
 console.log(`Niveles: ${comprobaciones.length} comprobaciones OK${advertencias.length ? ` (${advertencias.length} advertencias)` : ''}`);
 process.exit(0);
