@@ -3,6 +3,40 @@
 // Definiciones: docs/catalogo-analitica.md (TR-02, TR-03, sección 5 `bi.fact_citas_enriquecida`).
 import { incidentes } from './incidentes.js';
 
+/**
+ * Nombre de un catálogo de servicio listo para clasificar: mayúsculas y sin tildes. `columna` es una expresión SQL
+ * de texto (p. ej. `catalogo`). Lo usan la agenda (CTE `citas`) y la facturación, para que clasifiquen igual.
+ */
+export const catalogoNormalizado = (columna: string) => `upper(translate(coalesce(${columna}, ''), 'ÁÉÍÓÚáéíóú', 'AEIOUAEIOU'))`;
+
+/**
+ * Tipo de servicio a partir del catálogo ya normalizado (`catalogoNormalizado`). Una sola definición para la agenda y
+ * la facturación: así un servicio cae en el mismo tipo en las dos pantallas (docs/catalogo-analitica.md).
+ */
+export const tipoServicio = (catNorm: string) => `CASE
+      WHEN ${catNorm} = '' OR ${catNorm} LIKE 'REUNION%' OR ${catNorm} LIKE 'GASTOS%' THEN 'administrativa'
+      WHEN ${catNorm} LIKE 'INTERVENCION EN CRISIS%' THEN 'crisis'
+      WHEN ${catNorm} LIKE '%PRIMERA VEZ%' THEN 'primera_vez'
+      WHEN ${catNorm} LIKE '%PSICOTERAPIA%' THEN 'psicoterapia'
+      WHEN ${catNorm} LIKE '%REHABILITACION%' THEN 'rehabilitacion'
+      WHEN ${catNorm} LIKE '%PRUEBA%' OR ${catNorm} LIKE 'INFORME%' OR ${catNorm} LIKE '%VALORACION%'
+           OR ${catNorm} LIKE 'PAQUETE DE NEUROPSICOLOGIA%' OR ${catNorm} LIKE 'EVALUACION%' THEN 'evaluacion'
+      WHEN ${catNorm} LIKE '%CONTROL%' OR ${catNorm} LIKE '%SEGUIMIENTO%' OR ${catNorm} LIKE 'PAQUETE (10)%' THEN 'control'
+      WHEN ${catNorm} LIKE 'TALLER%' OR ${catNorm} LIKE 'PROGRAMA%' THEN 'empresarial'
+      ELSE 'otro'
+    END`;
+
+/**
+ * Especialidad a partir del catálogo ya normalizado, con los mismos nombres que la agenda. Neuropsicología se
+ * revisa antes que Psicología porque su nombre la contiene.
+ */
+export const especialidadDeCatalogo = (catNorm: string) => `CASE
+      WHEN ${catNorm} LIKE '%PSIQUIATR%' THEN 'Psiquiatría'
+      WHEN ${catNorm} LIKE '%NEUROPSICOLOG%' OR ${catNorm} LIKE '%COGNITIV%' THEN 'Neuropsicología'
+      WHEN ${catNorm} LIKE '%PSICOLOG%' OR ${catNorm} LIKE '%PSICOTERAPIA%' THEN 'Psicología'
+      ELSE 'Otra'
+    END`;
+
 /** Fecha de hoy en Bogotá. */
 export const HOY = `(now() AT TIME ZONE 'America/Bogota')::date`;
 
@@ -65,18 +99,7 @@ export const CITAS = `citas AS NOT MATERIALIZED (
     END AS grupo,
     -- D11: las anuladas se tratan como errores de registro y no cuentan como cita de paciente en ningún indicador.
     (NOT (cat_norm = '' OR cat_norm LIKE 'REUNION%' OR cat_norm LIKE 'GASTOS%') AND estado_agenda IS DISTINCT FROM 'Anulado') AS es_cita_paciente,
-    CASE
-      WHEN cat_norm = '' OR cat_norm LIKE 'REUNION%' OR cat_norm LIKE 'GASTOS%' THEN 'administrativa'
-      WHEN cat_norm LIKE 'INTERVENCION EN CRISIS%' THEN 'crisis'
-      WHEN cat_norm LIKE '%PRIMERA VEZ%' THEN 'primera_vez'
-      WHEN cat_norm LIKE '%PSICOTERAPIA%' THEN 'psicoterapia'
-      WHEN cat_norm LIKE '%REHABILITACION%' THEN 'rehabilitacion'
-      WHEN cat_norm LIKE '%PRUEBA%' OR cat_norm LIKE 'INFORME%' OR cat_norm LIKE '%VALORACION%'
-           OR cat_norm LIKE 'PAQUETE DE NEUROPSICOLOGIA%' OR cat_norm LIKE 'EVALUACION%' THEN 'evaluacion'
-      WHEN cat_norm LIKE '%CONTROL%' OR cat_norm LIKE '%SEGUIMIENTO%' OR cat_norm LIKE 'PAQUETE (10)%' THEN 'control'
-      WHEN cat_norm LIKE 'TALLER%' OR cat_norm LIKE 'PROGRAMA%' THEN 'empresarial'
-      ELSE 'otro'
-    END AS tipo_servicio,
+    ${tipoServicio('cat_norm')} AS tipo_servicio,
     CASE tipo_cita WHEN 1 THEN 'presencial' WHEN 4 THEN 'virtual' ELSE 'sin_dato' END AS modalidad,
     CASE WHEN coalesce(nullif(trim(administradora), ''), 'Particular') = 'Particular' THEN 'particular' ELSE 'convenio' END AS tipo_pago,
     coalesce(nullif(trim(administradora), ''), 'Particular') AS administradora_n,
@@ -100,7 +123,7 @@ export const CITAS = `citas AS NOT MATERIALIZED (
     SELECT c.*, n.cat_norm,
       regexp_replace(trim(coalesce(c.profesional, '')), '\\s+', ' ', 'g') AS profesional_nombre
     FROM bi.fact_citas c
-    CROSS JOIN LATERAL (SELECT upper(translate(coalesce(c.catalogo, ''), 'ÁÉÍÓÚáéíóú', 'AEIOUAEIOU')) AS cat_norm OFFSET 0) n
+    CROSS JOIN LATERAL (SELECT ${catalogoNormalizado('c.catalogo')} AS cat_norm OFFSET 0) n
   ) b
 )`;
 

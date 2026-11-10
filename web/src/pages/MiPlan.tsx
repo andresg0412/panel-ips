@@ -27,6 +27,7 @@ const SECCIONES: [string | null, string][] = [
   ['chatbot', 'Chatbot'],
   ['pacientes', 'Pacientes'],
   ['lista-espera', 'Lista de espera'],
+  ['facturacion', 'Facturación'],
   ['marketing', 'Marketing'],
   ['alertas', 'Alertas'],
   [null, 'Descargas'],

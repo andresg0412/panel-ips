@@ -106,6 +106,9 @@ const CONDICIONES: Record<string, (o: Ocultos) => (string | null)[]> = {
   'bi.dim_paciente': (o) => [fuera('paciente_id', o.pacientes)],
   'bi.dim_contacto': (o) => [fuera('telefono_norm', o.telefonos), fuera('paciente_id', o.pacientes), fuera('documento', o.documentos)],
   'bi.fact_cita_estados': (o) => [fuera('agenda_id', o.citas)],
+  // Facturación y recaudo de Globho (migración 048): llevan el paciente por documento, no por teléfono.
+  'bi.fact_facturacion': (o) => [fuera('paciente_id', o.pacientes), fuera('documento_paciente', o.documentos)],
+  'bi.fact_recaudo': (o) => [fuera('paciente_id', o.pacientes), fuera('documento_paciente', o.documentos)],
   'bi.fact_lista_espera': (o) => [fuera('paciente_id', o.pacientes), fuera('cita_actual_id', o.citas)],
   'bi.v_timeline_paciente': (o) => [fuera('telefono_norm', o.telefonos), fuera('paciente_id', o.pacientes), fuera('documento', o.documentos)],
   // Historial de conversaciones (migración 045 del backend, esquema `historial`): texto de los mensajes. Un teléfono

@@ -14,13 +14,13 @@ export const HISTORIAL_DIAS: Record<Nivel, number | null> = { basico: 90, interm
 export const MAX_USUARIOS: Record<Nivel, number | null> = { basico: 1, intermedio: 4, full: null };
 
 export type Pagina =
-  | 'resumen' | 'campanas' | 'agenda' | 'capacidad' | 'profesionales' | 'chatbot' | 'lista-espera' | 'pacientes' | 'marketing'
+  | 'resumen' | 'campanas' | 'agenda' | 'capacidad' | 'profesionales' | 'chatbot' | 'lista-espera' | 'pacientes' | 'marketing' | 'facturacion'
   | 'alertas' | 'plan' | 'mi-agenda' | 'informe' | 'semanal' | 'inteligencia' | 'envios' | 'conversaciones' | 'soporte';
 
 export type Rol = 'direccion' | 'operacion' | 'analista' | 'relacion' | 'profesional' | 'soporte';
 export const esRol = (v: unknown): v is Rol => typeof v === 'string' && v in ROLES;
 
-const CLIENTE: Pagina[] = ['resumen', 'informe', 'semanal', 'inteligencia', 'campanas', 'envios', 'agenda', 'capacidad', 'profesionales', 'chatbot', 'lista-espera', 'pacientes', 'marketing', 'alertas', 'plan', 'conversaciones'];
+const CLIENTE: Pagina[] = ['resumen', 'informe', 'semanal', 'inteligencia', 'campanas', 'envios', 'agenda', 'capacidad', 'profesionales', 'chatbot', 'lista-espera', 'pacientes', 'marketing', 'facturacion', 'alertas', 'plan', 'conversaciones'];
 
 export const ROLES: Record<Rol, { nombre: string; inicio: Pagina; paginas: Pagina[] }> = {
   direccion: { nombre: 'Dirección', inicio: 'resumen', paginas: CLIENTE },
@@ -172,6 +172,14 @@ export const FUNCIONES: Funcion[] = [
     roles: ['direccion', 'soporte'],
   },
 
+  // Facturación y recaudo de Globho (descarga diaria desde el scraper). Muestra cifras de ventas de la IPS: solo
+  // plan Full y solo Dirección, Analista y Soporte (la página no está en los demás roles).
+  // Diseño: proyecto-ips/docs/features/2026-11-09-modulo-facturacion.md, sección 7.
+  { clave: 'facturacion.diario', pagina: 'facturacion', nivel: 'full', titulo: 'Facturación: ventas por día, con los indicadores del período' },
+  { clave: 'facturacion.desglose', pagina: 'facturacion', nivel: 'full', titulo: 'Facturación por servicio, convenio y especialidad, y detalle de facturas' },
+  { clave: 'facturacion.recaudo', pagina: 'facturacion', nivel: 'full', titulo: 'Recaudo en caja y bancos: método de pago, caja o banco y cajero' },
+  { clave: 'facturacion.comparativo', pagina: 'facturacion', nivel: 'full', titulo: 'Comparativo de periodos de facturación y recaudo' },
+
   { clave: 'marketing.alcance', pagina: 'marketing', nivel: 'intermedio', titulo: 'Alcance de WhatsApp por mes' },
   { clave: 'marketing.segmentos', pagina: 'marketing', nivel: 'full', titulo: 'Segmentos de pacientes para invitar a volver' },
 
@@ -273,6 +281,12 @@ export const ENDPOINTS: Record<string, string> = {
   'GET /api/envios/invitacion/previsualizar': 'envios.ver',
   'GET /api/envios/invitacion/historial': 'envios.ver',
   'POST /api/envios/invitacion/ejecutar': 'envios.ejecutar',
+  'GET /api/facturacion': 'facturacion.diario',
+  'GET /api/facturacion/estado': 'facturacion.diario',
+  'GET /api/facturacion/desglose': 'facturacion.desglose',
+  'GET /api/facturacion/facturas': 'facturacion.desglose',
+  'GET /api/facturacion/recaudo': 'facturacion.recaudo',
+  'GET /api/facturacion/comparativo': 'facturacion.comparativo',
   'GET /api/marketing': 'marketing.alcance',
 
   'GET /api/conversaciones': 'conversaciones.ver',

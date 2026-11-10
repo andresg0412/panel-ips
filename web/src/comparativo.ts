@@ -42,7 +42,7 @@ export interface RespuestaComparativa<D> {
 /** Parámetros del comparativo en el hash de la URL: App.tsx los conserva al cambiar el rango o la pantalla. */
 export const PARAMS_COMPARATIVO = ['mesA', 'mesB', 'modo', 'corte'] as const;
 
-/** Primer mes con datos (la carga inicial de Globho). */
+/** Primer mes con datos de la agenda (la carga inicial de Globho). Otras pantallas, como Facturación, traen el suyo. */
 export const PRIMER_MES = '2025-08';
 const MES = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -57,20 +57,21 @@ export function mesMas(mes: string, n: number): string {
 }
 
 /** Meses del más reciente al más antiguo, desde el mes en curso hasta el primero con datos. */
-export function mesesDisponibles(): string[] {
+export function mesesDisponibles(primerMes = PRIMER_MES): string[] {
   const meses: string[] = [];
-  for (let m = mesActual(); m >= PRIMER_MES; m = mesMas(m, -1)) meses.push(m);
+  for (let m = mesActual(); m >= primerMes; m = mesMas(m, -1)) meses.push(m);
   return meses;
 }
 
 /** El mismo mes del año anterior tiene datos. */
-export const hayInteranual = (mesA: string) => mesMas(mesA, -12) >= PRIMER_MES;
+export const hayInteranual = (mesA: string, primerMes = PRIMER_MES) => mesMas(mesA, -12) >= primerMes;
 
 /** Con el modo "mes anterior" el mes A no puede ser el primero con datos: no habría con qué comparar. */
-export const hayMesAnterior = (mesA: string) => mesA > PRIMER_MES;
+export const hayMesAnterior = (mesA: string, primerMes = PRIMER_MES) => mesA > primerMes;
 
 /** ¿Este mes se puede elegir como A en ese modo? */
-export const mesAValido = (modo: Modo, mes: string) => (modo === 'interanual' ? hayInteranual(mes) : modo === 'mes_anterior' ? hayMesAnterior(mes) : true);
+export const mesAValido = (modo: Modo, mes: string, primerMes = PRIMER_MES) =>
+  modo === 'interanual' ? hayInteranual(mes, primerMes) : modo === 'mes_anterior' ? hayMesAnterior(mes, primerMes) : true;
 
 export interface Eleccion {
   modo: Modo;
@@ -91,18 +92,19 @@ export function mesAInicial(): string {
   return dia === '01' ? mesMas(mesActual(), -1) : mesActual();
 }
 
-const otroMes = (mesA: string) => (hayMesAnterior(mesA) ? mesMas(mesA, -1) : mesMas(mesA, 1));
+const otroMes = (mesA: string, primerMes: string) => (hayMesAnterior(mesA, primerMes) ? mesMas(mesA, -1) : mesMas(mesA, 1));
 
 /** Deja la elección en un estado que el servidor acepta (p. ej., sin interanual si no hay datos del año anterior). */
-function normalizar(e: Eleccion): Eleccion {
+function normalizar(e: Eleccion, primerMes: string): Eleccion {
   let { modo, mesA, mesB } = e;
-  if (modo === 'interanual' && !hayInteranual(mesA)) modo = 'mes_anterior';
-  if (modo === 'mes_anterior' && !hayMesAnterior(mesA)) mesA = mesMas(PRIMER_MES, 1);
-  if (modo === 'libre' && (!mesB || mesB === mesA)) mesB = otroMes(mesA);
+  if (mesA < primerMes) mesA = primerMes;
+  if (modo === 'interanual' && !hayInteranual(mesA, primerMes)) modo = 'mes_anterior';
+  if (modo === 'mes_anterior' && !hayMesAnterior(mesA, primerMes)) mesA = mesMas(primerMes, 1);
+  if (modo === 'libre' && (!mesB || mesB === mesA || mesB < primerMes)) mesB = otroMes(mesA, primerMes);
   return { ...e, modo, mesA, mesB: modo === 'libre' ? mesB : null };
 }
 
-function leerUrl(): Eleccion {
+function leerUrl(primerMes: string): Eleccion {
   const q = new URLSearchParams(location.hash.split('?')[1] ?? '');
   const mes = (clave: string) => {
     const v = q.get(clave);
@@ -115,7 +117,7 @@ function leerUrl(): Eleccion {
     mesA: mes('mesA') ?? mesAInicial(),
     mesB: mes('mesB'),
     corte: corte === 'completo' || corte === 'mismo_dia' ? corte : null,
-  });
+  }, primerMes);
 }
 
 function escribirUrl(e: Eleccion) {
@@ -142,11 +144,14 @@ export interface ControlComparativo {
   cambiarCorte: (corte: Corte) => void;
 }
 
-/** Elección de meses de la pantalla, guardada en la URL. Las tres pantallas comparten los mismos parámetros. */
-export function useComparativo(): ControlComparativo {
-  const [eleccion, setEleccion] = useState<Eleccion>(leerUrl);
+/**
+ * Elección de meses de la pantalla, guardada en la URL. Las pantallas comparten los mismos parámetros. `primerMes` es
+ * el primer mes con datos de esa pantalla (por defecto, el de la agenda).
+ */
+export function useComparativo(primerMes = PRIMER_MES): ControlComparativo {
+  const [eleccion, setEleccion] = useState<Eleccion>(() => leerUrl(primerMes));
   const cambiar = (cambio: Partial<Eleccion>) => {
-    const nueva = normalizar({ ...eleccion, ...cambio });
+    const nueva = normalizar({ ...eleccion, ...cambio }, primerMes);
     escribirUrl(nueva);
     setEleccion(nueva);
   };

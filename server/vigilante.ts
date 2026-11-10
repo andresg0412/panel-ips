@@ -30,6 +30,8 @@ export interface Comprobacion {
 }
 
 const INTERVALO_MS = 5 * 60_000;
+/** La descarga de facturación es diaria: pasadas 36 horas sin una ejecución correcta, algo falló. */
+const HORAS_MAX_FACTURACION = 36;
 const TIMEOUT_HTTP_MS = 6_000;
 
 // URL vacía = no se comprueba (desarrollo local, donde esos contenedores no existen).
@@ -209,6 +211,33 @@ const REGLAS: { nombre: string; grupo: Grupo; fn: Regla }[] = [
           detalle: a.detalle,
           impacto: impactos[a.alerta] ?? 'Ver la pantalla Alertas.',
           enlace: ENLACE_ALERTA[a.alerta] ?? '#/alertas',
+        });
+      }
+    },
+  },
+  {
+    // Descarga diaria de facturación y recaudo desde Globho (módulo de facturación del backend, migración 048). Sin
+    // ninguna ejecución registrada el módulo está apagado y no se alerta. Las alertas viven en Soporte: las pantallas
+    // de Facturación no llevan banners.
+    nombre: 'Descarga de facturación de Globho',
+    grupo: 'integraciones',
+    fn: async (out) => {
+      const reportes = await query<{ reporte: string; estado: string; ok_recibida_at: string | null; horas_desde_ok: number | null }>(
+        `SELECT reporte, estado, ok_recibida_at, horas_desde_ok FROM bi.v_facturacion_estado`,
+      ).catch(() => []); // sin la migración 048 no hay vista
+      for (const r of reportes) {
+        const sinActualizar = r.estado !== 'ok' || r.horas_desde_ok === null || r.horas_desde_ok > HORAS_MAX_FACTURACION;
+        if (!sinActualizar) continue;
+        const nombre = r.reporte === 'recaudo' ? 'recaudo' : 'facturación';
+        const desde = r.ok_recibida_at ?? 'nunca';
+        out.push({
+          clave: `integraciones:facturacion:${r.reporte}`, grupo: 'integraciones', severidad: 'media',
+          titulo: `La descarga de ${nombre} de Globho no se actualizó desde ${desde}`,
+          detalle: r.estado === 'ok'
+            ? `La última descarga correcta fue hace ${Math.round(r.horas_desde_ok ?? 0)} horas.`
+            : `La última ejecución terminó como "${r.estado}".`,
+          impacto: 'Las ventas y el recaudo del panel quedan desactualizados. Revisar el scraper (`GET /api/scraper/facturacion/estado` en el backend) y los logs del contenedor.',
+          enlace: '#/facturacion',
         });
       }
     },

@@ -48,7 +48,7 @@ const MODOS: readonly ModoComparativo[] = ['mes_anterior', 'interanual', 'libre'
 const CORTES: readonly CorteComparativo[] = ['completo', 'mismo_dia'];
 const MES = /^(\d{4})-(0[1-9]|1[0-2])$/;
 const NOMBRES_MES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-const PRIMER_MES = INICIO_DATOS.slice(0, 7);
+const PRIMER_MES_AGENDA = INICIO_DATOS.slice(0, 7);
 /** Más de esta fracción del periodo en un incidente vuelve poco confiable la comparación. */
 const UMBRAL_INCIDENTE = 0.3;
 /** Más de esta fracción de citas sin cierre hace dudar de los totales del periodo. */
@@ -78,6 +78,12 @@ export function etiquetaMes(mes: string): string {
   return `${NOMBRES_MES[m - 1]} ${anio}`;
 }
 
+/** 'agosto de 2025' (para frases como "Los datos empiezan en…"). */
+const mesConDe = (mes: string) => {
+  const { anio, m } = numeroMes(mes);
+  return `${NOMBRES_MES[m - 1]} de ${anio}`;
+};
+
 const conInicialMayuscula = (texto: string) => texto.charAt(0).toUpperCase() + texto.slice(1);
 
 function leerMes(valor: unknown): string | null {
@@ -92,7 +98,18 @@ function leerOpcion<T extends string>(valor: unknown, validas: readonly T[]): T 
   return valor as T;
 }
 
-function armarPeriodo(mes: string, mesActual: string, diaCorte: number | null): Periodo {
+/**
+ * Qué datos se comparan. La agenda es el valor por defecto; la facturación tiene su propio primer mes (el de la carga
+ * histórica) y no marca ninguno como "carga inicial", porque ese aviso habla de pacientes nuevos.
+ */
+export interface OpcionesComparativo {
+  /** Primer mes con datos ('AAAA-MM'). Por defecto, el primero de la agenda. */
+  primerMes?: string;
+  /** El primer mes es la carga inicial de Globho: sus pacientes "nuevos" no son confiables. Por defecto, sí. */
+  avisarCargaInicial?: boolean;
+}
+
+function armarPeriodo(mes: string, mesActual: string, diaCorte: number | null, cargaInicial: string | null): Periodo {
   const ultimo = ultimoDiaMes(mes);
   const dias = diaCorte === null ? ultimo : Math.min(diaCorte, ultimo);
   const desde = `${mes}-01`;
@@ -104,7 +121,7 @@ function armarPeriodo(mes: string, mesActual: string, diaCorte: number | null): 
     hasta,
     dias,
     enCurso: mes === mesActual,
-    cargaInicial: mes === PRIMER_MES,
+    cargaInicial: mes === cargaInicial,
     fraccionIncidente: fraccionEnIncidente(desde, hasta),
   };
 }
@@ -159,6 +176,7 @@ export function resolverComparativo(
   q: Record<string, unknown>,
   ctx: { nivel: Nivel; historialDesde: string | null },
   hoy: string = hoyBogota(),
+  { primerMes = PRIMER_MES_AGENDA, avisarCargaInicial = true }: OpcionesComparativo = {},
 ): Comparativo {
   const mesActual = hoy.slice(0, 7);
   const diaHoy = Number(hoy.slice(8, 10));
@@ -177,7 +195,7 @@ export function resolverComparativo(
 
   if (mesA === mesB) throw new ErrorParametro('Elija dos meses distintos');
   if (mesA > mesActual || mesB > mesActual) throw new ErrorParametro('No se puede comparar un mes que todavía no empieza');
-  if (mesA < PRIMER_MES || mesB < PRIMER_MES) throw new ErrorParametro('Los datos empiezan en agosto de 2025');
+  if (mesA < primerMes || mesB < primerMes) throw new ErrorParametro(`Los datos empiezan en ${mesConDe(primerMes)}`);
 
   // Si cualquiera de los dos meses está en curso, se compara por defecto hasta el mismo día.
   const hayMesEnCurso = mesA === mesActual || mesB === mesActual;
@@ -190,8 +208,9 @@ export function resolverComparativo(
     if (diaCorte < 1) throw new ErrorParametro("El mes en curso todavía no tiene días cerrados. Elija el mes anterior o use 'mes completo'.");
   }
 
-  const a = armarPeriodo(mesA, mesActual, diaCorte);
-  const b = armarPeriodo(mesB, mesActual, diaCorte);
+  const mesCargaInicial = avisarCargaInicial ? primerMes : null;
+  const a = armarPeriodo(mesA, mesActual, diaCorte, mesCargaInicial);
+  const b = armarPeriodo(mesB, mesActual, diaCorte, mesCargaInicial);
 
   if (ctx.historialDesde && (a.desde < ctx.historialDesde || b.desde < ctx.historialDesde)) {
     const dias = HISTORIAL_DIAS[ctx.nivel];

@@ -2,6 +2,11 @@ const nf = new Intl.NumberFormat('es-CO');
 
 export const num = (v: unknown) => (v === null || v === undefined || v === '' ? '—' : nf.format(Number(v)));
 
+const pesosFormato = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
+
+/** Importe en pesos colombianos, sin decimales: "$ 80.009.609". */
+export const pesos = (v: unknown) => (v === null || v === undefined || v === '' ? '—' : pesosFormato.format(Number(v)));
+
 export function pct(parte: number, total: number, decimales = 1): string {
   if (!total) return '—';
   return `${((parte / total) * 100).toFixed(decimales).replace('.', ',')} %`;

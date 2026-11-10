@@ -20,7 +20,7 @@ export function enmascarar(v: unknown): unknown {
 /** Cifras de "En lista de espera ahora" que el Básico no recibe (el servidor las vacía; el frontend las oculta tras el candado). */
 const AHORA_SIN_DESGLOSE = { con_oferta_en_curso: null, sin_cita_elegible: null, cupos_en_espera: null };
 
-const CAMPOS_PERSONALES = ['documento_paciente', 'numero_documento', 'telefono_norm', 'numero_contacto', 'email', 'documento'];
+const CAMPOS_PERSONALES = ['documento_paciente', 'numero_documento', 'telefono_norm', 'numero_contacto', 'email', 'documento', 'telefono_paciente', 'mail_paciente'];
 
 /** Enmascara documento, teléfono y correo de cada fila si la persona no tiene `datos.identidad`. */
 const enmascararFilas = (req: FastifyRequest, filas: Datos[]) =>
@@ -32,6 +32,7 @@ const RECORTES: Record<string, Recorte> = {
   'GET /api/campanas/envios': (req, d) => ({ ...d, filas: enmascararFilas(req, d.filas) }),
   'GET /api/pacientes/buscar': (req, d) => ({ ...d, filas: enmascararFilas(req, d.filas) }),
   'GET /api/envios/invitacion/previsualizar': (req, d) => ({ ...d, filas: enmascararFilas(req, d.filas) }),
+  'GET /api/facturacion/facturas': (req, d) => ({ ...d, filas: enmascararFilas(req, d.filas) }),
   'GET /api/pacientes/:id': (req, d) => (d.paciente ? { ...d, paciente: enmascararFilas(req, [d.paciente])[0] } : d),
 
   'GET /api/resumen': (req, d) =>

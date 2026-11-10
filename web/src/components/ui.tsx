@@ -128,7 +128,7 @@ export function calcularDelta(actual: number, anterior: number, formato: 'num' |
  * Indicador con comparación contra el período anterior.
  * `mejorSiSube=false` para métricas donde subir es malo (cancelaciones, abandono); `null` si es neutra.
  */
-export function Kpi({ etiqueta, valor, actual, anterior, mejorSiSube = true, formato = 'num', comparacion = 'vs período anterior', sinComparacion, meta, ayuda }: {
+export function Kpi({ etiqueta, valor, actual, anterior, mejorSiSube = true, formato = 'num', formatear = num, comparacion = 'vs período anterior', sinComparacion, meta, ayuda }: {
   etiqueta: string;
   /** Definición de la métrica (se muestra en la "i"). */
   ayuda?: string;
@@ -137,6 +137,8 @@ export function Kpi({ etiqueta, valor, actual, anterior, mejorSiSube = true, for
   anterior?: number | null;
   mejorSiSube?: boolean | null;
   formato?: 'num' | 'pct';
+  /** Cómo se escribe un valor 'num' (por defecto, número con miles; p. ej. `pesos` para importes). */
+  formatear?: (v: number) => string;
   /** Texto de la comparación, p. ej. 'vs mismo período de 2025'. */
   comparacion?: string;
   /** Texto que reemplaza a la diferencia cuando no se puede comparar (p. ej. 'pocos datos'). */
@@ -144,7 +146,7 @@ export function Kpi({ etiqueta, valor, actual, anterior, mejorSiSube = true, for
   /** Meta: muestra un indicador (✓ cumple / ! cerca / ✕ lejos). Para pct, en proporción (0,92). */
   meta?: { valor: number; mejorSiSube?: boolean };
 }) {
-  const mostrar = valor ?? (actual === null ? '—' : formato === 'pct' ? `${(actual * 100).toFixed(1).replace('.', ',')} %` : num(actual));
+  const mostrar = valor ?? (actual === null ? '—' : formato === 'pct' ? `${(actual * 100).toFixed(1).replace('.', ',')} %` : formatear(actual));
   let delta: ReactNode = <span className="delta">{sinComparacion ?? <>&nbsp;</>}</span>;
   if (!sinComparacion && anterior !== undefined && anterior !== null && actual !== null) {
     const d = calcularDelta(actual, anterior, formato, mejorSiSube);
@@ -157,7 +159,7 @@ export function Kpi({ etiqueta, valor, actual, anterior, mejorSiSube = true, for
     } else if (d.relativa !== null) {
       delta = (
         <span className={`delta ${d.clase}`}>
-          {d.flecha} {Math.abs(d.relativa * 100).toFixed(0)} % {comparacion} ({num(anterior)})
+          {d.flecha} {Math.abs(d.relativa * 100).toFixed(0)} % {comparacion} ({formatear(anterior)})
         </span>
       );
     } else {

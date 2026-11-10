@@ -759,6 +759,25 @@ Pestaña "Comparativo de periodos" en las tres pantallas, solo plan Full. Compar
 - **CMP-04 Pacientes.** Atendidos (pacientes distintos con una cita atendida), nuevos y recurrentes como en PAC-01 (la primera atención se busca en todo el historial), % de nuevos, citas atendidas por paciente, pacientes con alguna inasistencia y perfil (edad, régimen, pago, modalidad y especialidad según la última cita atendida del mes). En ago-2025 no se informa la división nuevos/recurrentes.
 - **CMP-05 Reglas de diferencia.** Conteos: diferencia absoluta y relativa (si el mes B es 0, la relativa es "—"). Tasas: puntos porcentuales; si la base de la tasa es menor de 30 en cualquiera de los dos meses, se muestra "pocos datos" y no se calcula la diferencia. Promedios: diferencia con un decimal. Los porcentajes los calcula el navegador a partir de conteos. El color sigue si subir es bueno o malo para cada métrica; las métricas neutras no llevan color.
 
+### 3.11 Facturación (ventas y recaudo de Globho)
+
+Fuente: `bi.fact_facturacion` (reporte "Facturación Detalle", una línea por servicio) y `bi.fact_recaudo` (informe "Recaudo Total x Cajero", un pago por fila), alimentadas por la descarga diaria del scraper. **Las anuladas nunca cuentan** en los totales. Solo plan Full; Dirección, Analista y Soporte.
+
+Las dos fuentes miden cosas distintas y **no se suman ni deben cuadrar**: la facturación es lo vendido (valor del servicio = lo que paga el paciente + lo que paga el convenio); el recaudo es lo que entró en caja y bancos de los pacientes. No incluye pagos de EPS ni prepagadas (cartera).
+
+- **FAC-01 Valor de servicios (ventas brutas):** `sum(valor_bruto)` sin anuladas, con `valor_bruto = valor_unitario × cantidad`.
+- **FAC-02 Paga el paciente (copagos y particulares):** en un servicio con convenio, `copago`; en un servicio particular (sin convenio), `copago + total_convenio`, porque Globho trae `Copago = 0` y pone todo el valor en `Total`. Sin anuladas.
+- **FAC-03 A cargo de convenios:** `total_convenio` solo de los servicios con convenio, sin anuladas. FAC-01 = FAC-02 + FAC-03.
+- **FAC-04 Facturas, servicios y ticket promedio:** facturas = `count(DISTINCT numero_factura)`; servicios = `sum(cantidad)`; ticket = FAC-01 ÷ servicios.
+- **FAC-05 Particular frente a convenio:** según `es_particular`. Se agrupa por nombre de convenio, no por código (el código no es único entre entidades).
+- **FAC-06 Recaudo:** `sum(valor)` de `bi.fact_recaudo` sin anulados, por `forma_pago` (método de pago), `caja_banco`, `cajero` y `regimen`. Método de pago y caja o banco no coinciden exactamente: parte del efectivo se registra en una cuenta bancaria.
+- **FAC-07 Eje de fecha:** la fecha de la factura (por defecto) o la del servicio, a elección. Los convenios se facturan consolidados a fin de mes: ese día se ve un pico. Por fecha del servicio, los días recientes pueden estar incompletos hasta que se facture.
+- **FAC-08 Servicios agrupados:** tipo de servicio con las mismas reglas que la agenda (`tipoServicio()` en `server/sql.ts`); servicio = código del catálogo con su nombre más frecuente; especialidad por palabras del catálogo (Neuropsicología se revisa antes que Psicología).
+- **FAC-09 Facturado por:** la columna `Profesional` del reporte es la persona de recepción que hizo la factura, no quien atendió. Información operativa, no un ranking de desempeño.
+- **FAC-10 Comparativo:** reglas CMP-01 a CMP-05 con el primer mes de la facturación cargada; sin aviso de carga inicial (habla de pacientes nuevos). Ventas por fecha de factura.
+- **Actualización:** `bi.v_facturacion_estado` dice cuándo se descargó cada reporte. Pasadas 36 horas sin una descarga correcta, o con la última ejecución en error o sospechosa, soporte recibe la alerta "La descarga de … de Globho no se actualizó desde …" (no hay banners en la pantalla).
+- **Privacidad:** documento, teléfono y correo se enmascaran a quien no tiene `datos.identidad`; las identidades ocultas del panel (`ocultos.ts`) no aparecen en ninguna cifra.
+
 ## 4. Datos que van a llegar y cómo se activan en el panel
 
 | Fuente o bandera | Estado hoy | Habilita | Datos útiles desde | Mientras tanto |
