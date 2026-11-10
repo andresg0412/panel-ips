@@ -157,6 +157,12 @@ main { padding: 24px 28px 48px; min-width: 0; }
 .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
 .kpi .etiqueta { color: var(--ink-2); font-size: 12.5px; }
 .kpi .valor { font-size: 26px; font-weight: 650; margin: 2px 0; }
+/* Un recuadro de la grilla no debe ensancharse por su contenido (min-width: auto lo hacía desbordar). */
+.kpi { min-width: 0; }
+.kpi .valor { overflow-wrap: anywhere; line-height: 1.2; }
+.kpi .valor.valor-largo { font-size: 22px; }
+.kpi .valor.valor-muy-largo { font-size: 19px; }
+.kpi .delta { overflow-wrap: anywhere; }
 .kpi .delta { font-size: 12px; color: var(--muted); }
 .kpi .delta.up { color: var(--up); }
 .kpi .delta.down { color: var(--down); }

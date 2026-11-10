@@ -4,8 +4,8 @@ export const num = (v: unknown) => (v === null || v === undefined || v === '' ? 
 
 const pesosFormato = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
 
-/** Importe en pesos colombianos, sin decimales: "$ 80.009.609". */
-export const pesos = (v: unknown) => (v === null || v === undefined || v === '' ? '—' : pesosFormato.format(Number(v)));
+/** Importe en pesos colombianos, sin decimales: "$ 80.009.609". El reemplazo pone un espacio fijo (U+00A0, invisible en el código: no cambiarlo por un espacio normal) para que "$" y el número no se separen al ajustar la línea. */
+export const pesos = (v: unknown) => (v === null || v === undefined || v === '' ? '—' : pesosFormato.format(Number(v)).replace(/\s/g, ' '));
 
 export function pct(parte: number, total: number, decimales = 1): string {
   if (!total) return '—';

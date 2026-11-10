@@ -186,7 +186,8 @@ export function Kpi({ etiqueta, valor, actual, anterior, mejorSiSube = true, for
         {etiqueta}
         {ayuda && <> <Info texto={ayuda} /></>}
       </div>
-      <div className="valor">{mostrar}</div>
+      {/* Montos largos (p. ej. "$ 116.317.307") achican la letra para no salirse del recuadro; el valor completo queda en el title. */}
+      <div className={`valor${mostrar.length > 13 ? ' valor-muy-largo' : mostrar.length > 10 ? ' valor-largo' : ''}`} title={mostrar}>{mostrar}</div>
       {delta}
       {indicadorMeta}
     </div>
