@@ -82,7 +82,7 @@ export default async function rutasPacientes(app: FastifyInstance) {
   app.get('/api/pacientes/panorama', async (req) => {
     const r = leerRango(req.query as Record<string, unknown>);
     return conCache(claveCache(req), async () => {
-      const [mensual, intervalos, perfil, resumenIntervalos] = await Promise.all([
+      const [mensual, intervalos, perfil, resumenIntervalos, nuevosPeriodo] = await Promise.all([
         // Nuevo en el mes = su primera atención (desde ago-2025) cae en ese mes. Ago-2025 incluye a quienes ya venían.
         query(
           `WITH ${CITAS},
@@ -120,8 +120,19 @@ export default async function rutasPacientes(app: FastifyInstance) {
                   percentile_cont(0.75) WITHIN GROUP (ORDER BY dias) AS p75
              FROM at WHERE dias > 0`,
         ),
+        // Pacientes nuevos en el rango: su primera atención registrada (en todo el historial) cae entre $1 y $2.
+        // Misma definición que PAC-01 y que el comparativo; si el rango incluye ago-2025 (carga inicial), sale inflado.
+        queryOne<{ n: number }>(
+          `WITH ${CITAS}
+           SELECT count(*) AS n
+             FROM (SELECT paciente_id, min(fecha_cita) AS primera
+                     FROM citas WHERE es_cita_paciente AND grupo = 'Asistió' AND paciente_id IS NOT NULL
+                    GROUP BY 1) p
+            WHERE primera BETWEEN $1 AND $2`,
+          [r.desde, r.hasta],
+        ),
       ]);
-      return { mensual, intervalos, perfil, resumenIntervalos };
+      return { mensual, intervalos, perfil, resumenIntervalos, nuevosPeriodo: nuevosPeriodo?.n ?? 0 };
     }, 300_000);
   });
 

@@ -31,7 +31,8 @@ check('Las tablas limitan la vista inicial a 10 filas', ui.includes('const FILAS
 check('Las tablas imprimen todas sus filas', !ui.includes('ordenadas.slice(') && /@media print \{[^@]*\.fila-extra \{ display: table-row; \}/.test(css));
 check('Las tablas permiten ver todas las filas', ui.includes("'Ver todas'") && ui.includes("'Mostrar menos'"));
 check('Las tablas permiten elegir columnas', ui.includes('columnasVisibles') && ui.includes('Elegir columnas'));
-check('La exportación conserva todas las filas y columnas', ui.includes('descargarCsv(nombreCsv, ordenadas, columnas)'));
+check('La exportación conserva todas las filas y columnas', ui.includes('descargarCsv(nombreCsv, ordenadas, columnas, false, total)'));
+check('Las tablas admiten una fila TOTAL fija al pie, también en el CSV', ui.includes('fila-total') && ui.includes('aCsv(filas, cols, total)'));
 check('El resumen tiene tres KPIs principales', resumen.includes('Ocupación de la agenda') && resumen.includes('Ver más indicadores'));
 check('La portada tiene acciones recomendadas', resumen.includes('Qué hacer ahora') && resumen.includes('acciones-recomendadas'));
 check('El detalle del resumen es expandible', resumen.includes('Explorar el detalle del período'));

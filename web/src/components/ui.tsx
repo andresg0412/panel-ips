@@ -236,19 +236,19 @@ export interface Columna<T> {
   oculta?: boolean;
 }
 
-function aCsv<T>(filas: T[], columnas: Columna<T>[]): string {
+function aCsv<T>(filas: T[], columnas: Columna<T>[], total?: T): string {
   const cols = columnas.filter((c) => !c.sinCsv);
   const esc = (s: string) => (/[";,\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
   const enc = cols.map((c) => esc(c.titulo)).join(';');
-  const cuerpo = filas.map((f) => cols.map((c) => esc(c.csv ? c.csv(f[c.clave], f) : String(f[c.clave] ?? ''))).join(';'));
+  const cuerpo = [...filas, ...(total ? [total] : [])].map((f) => cols.map((c) => esc(c.csv ? c.csv(f[c.clave], f) : String(f[c.clave] ?? ''))).join(';'));
   return [enc, ...cuerpo].join('\n');
 }
 
 /** `registrada`: el servidor ya registró la descarga (datos personales); no se registra dos veces. */
-export function descargarCsv<T>(nombre: string, filas: T[], cols: Columna<T>[], registrada = false) {
+export function descargarCsv<T>(nombre: string, filas: T[], cols: Columna<T>[], registrada = false, total?: T) {
   if (!registrada) registrar('exportacion', nombre, `${filas.length} filas`);
   // BOM para que Excel abra bien las tildes; ';' como separador (configuración regional de Colombia).
-  const blob = new Blob(['﻿' + aCsv(filas, cols)], { type: 'text/csv;charset=utf-8' });
+  const blob = new Blob(['﻿' + aCsv(filas, cols, total)], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `${nombre}.csv`;
@@ -260,9 +260,11 @@ export function descargarCsv<T>(nombre: string, filas: T[], cols: Columna<T>[], 
 const FILAS_INICIALES = 10;
 const COLUMNAS_PARA_SELECTOR = 5;
 
-export function Tabla<T extends Record<string, any>>({ filas, columnas, nombreCsv, alFila, vacio = 'Sin datos para este período' }: {
+export function Tabla<T extends Record<string, any>>({ filas, columnas, nombreCsv, alFila, vacio = 'Sin datos para este período', total }: {
   filas: T[];
   columnas: Columna<T>[];
+  /** Fila de totales: va fija al final (no se ordena ni se oculta con "Ver todas") y también sale en el CSV. */
+  total?: T;
   nombreCsv?: string;
   alFila?: (f: T) => void;
   vacio?: string;
@@ -355,6 +357,17 @@ export function Tabla<T extends Record<string, any>>({ filas, columnas, nombreCs
               ))
             )}
           </tbody>
+          {total && ordenadas.length > 0 && (
+            <tfoot>
+              <tr className="fila-total">
+                {columnasActivas.map((c) => (
+                  <td key={columnas.indexOf(c)} className={c.num ? 'num' : ''}>
+                    {c.formato ? c.formato(total[c.clave], total) : c.num ? num(total[c.clave]) : String(total[c.clave] ?? '')}
+                  </td>
+                ))}
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
       {filas.length > 0 && (
@@ -363,7 +376,7 @@ export function Tabla<T extends Record<string, any>>({ filas, columnas, nombreCs
           <span className="solo-impresion">{num(filas.length)} filas</span>
           {filas.length > FILAS_INICIALES && <button className="boton boton-secundario" onClick={() => setMostrarTodas((v) => !v)}>{mostrarTodas ? 'Mostrar menos' : 'Ver todas'}</button>}
           {nombreCsv && puede('exportar.csv') ? (
-            <button className="boton" onClick={() => descargarCsv(nombreCsv, ordenadas, columnas)}>Descargar CSV</button>
+            <button className="boton" onClick={() => descargarCsv(nombreCsv, ordenadas, columnas, false, total)}>Descargar CSV</button>
           ) : nombreCsv && visible('exportar.csv') ? (
             <span className="boton boton-bloqueado" title={`Descargar CSV: disponible en el plan ${nombreNivel(nivelDe('exportar.csv'))}`}>
               <Candado /> Descargar CSV
