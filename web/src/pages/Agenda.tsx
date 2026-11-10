@@ -6,7 +6,7 @@ import { Estado, Kpi, ListaConteo, Tabla, Tarjeta, type Columna } from '../compo
 import { DIAS, etiqueta, fecha, fechaHora, hora, pct } from '../format';
 import { Pestanas, useMarcas, usePestana, useSombras } from '../incidentes';
 import { Bloqueado, Restringido, useAcceso } from '../acceso';
-import { canceladasPct, cumplimiento, esperadas, tasa, type PorEstado } from '../metricas';
+import { canceladasPct, cumplimiento, esperadas, noAsistioPct, reprogramadasPct, tasa, totalPorEstado, type PorEstado } from '../metricas';
 import { AgendaProximas, AnticipacionCancelaciones } from './Ocupacion';
 import { AgendaCalidad, AgendaInasistencia, AgendaTendencias } from './AgendaAnalisis';
 import AgendaComparativo from './AgendaComparativo';
@@ -47,7 +47,7 @@ const colsEstado = (titulo: string): Columna<PorEstado>[] => [
   { clave: 'sin_cierre', titulo: 'Sin cierre', num: true },
   {
     clave: 'asistio',
-    titulo: 'Asistencia a citas realizadas',
+    titulo: 'Porcentaje de asistencia',
     num: true,
     formato: (_v, f) => pct(f.asistio, f.asistio + f.no_asistio),
     csv: (_v, f) => pct(f.asistio, f.asistio + f.no_asistio),
@@ -63,7 +63,7 @@ const colsEstado = (titulo: string): Columna<PorEstado>[] => [
   },
   {
     clave: 'canceladas',
-    titulo: 'Canceladas %',
+    titulo: 'Porcentaje canceladas',
     num: true,
     formato: (_v, f) => pct(f.canceladas, esperadas(f)),
     csv: (_v, f) => pct(f.canceladas, esperadas(f)),
@@ -74,7 +74,7 @@ const COLS_PROF = colsEstado('Profesional');
 const COLS_ESP = colsEstado('Especialidad');
 const COLS_ADM = colsEstado('Convenio / administradora');
 const COLS_SERV: Columna<PorEstado>[] = [
-  { clave: 'nombre', titulo: 'Tipo de atención', formato: etiqueta, csv: etiqueta },
+  { clave: 'nombre', titulo: 'Tipo de atención', formato: (v) => (v === 'TOTAL' ? 'TOTAL' : etiqueta(v)), csv: (v) => (v === 'TOTAL' ? 'TOTAL' : etiqueta(v)) },
   { clave: 'total', titulo: 'Total', num: true },
   { clave: 'asistio', titulo: 'Asistió', num: true },
   {
@@ -164,18 +164,8 @@ function AgendaPeriodo({ rango }: { rango: Rango }) {
     [data],
   );
 
-  const tot = data?.especialidad.reduce(
-    (acc, f) => ({
-      total: acc.total + f.total,
-      asistio: acc.asistio + f.asistio,
-      no_asistio: acc.no_asistio + f.no_asistio,
-      canceladas: acc.canceladas + f.canceladas,
-      reprogramadas: acc.reprogramadas + f.reprogramadas,
-      programadas: acc.programadas + f.programadas,
-      sin_cierre: (acc.sin_cierre ?? 0) + (f.sin_cierre ?? 0),
-    }),
-    { total: 0, asistio: 0, no_asistio: 0, canceladas: 0, reprogramadas: 0, programadas: 0, sin_cierre: 0 } as PorEstado,
-  );
+  // Totales del período: la tabla por especialidad cubre todas las citas (agrupa el resto en "Otra").
+  const tot = data ? totalPorEstado(data.especialidad) : undefined;
   const totalCanceladas = data?.origenCancelacion.reduce((s, o) => s + o.n, 0) ?? 0;
 
   return (
@@ -184,24 +174,27 @@ function AgendaPeriodo({ rango }: { rango: Rango }) {
       {data && tot && (
         <>
           <div className="kpis">
-            <Kpi etiqueta="Citas en el período" actual={tot.total} />
-            <Kpi etiqueta="Asistencia a citas realizadas" formato="pct" actual={tasa(tot)} ayuda="Asistió ÷ (asistió + no asistió). No cuenta las canceladas, anuladas ni reprogramadas." />
+            <Kpi etiqueta="Agendadas en el período" actual={tot.total} ayuda="Todas las citas de pacientes del período, en cualquier estado. No cuenta las anuladas (errores de registro)." />
+            <Kpi etiqueta="Asistidas en el período" actual={tot.asistio} />
+            <Kpi etiqueta="Porcentaje de asistencia" formato="pct" actual={tasa(tot)} ayuda="Asistió ÷ (asistió + no asistió). No cuenta las canceladas, anuladas ni reprogramadas." />
             <Kpi etiqueta="Cumplimiento de agenda" formato="pct" actual={cumplimiento(tot)} ayuda="Asistió ÷ (asistió + no asistió + canceladas). Las anuladas (errores de registro) y las reprogramadas no cuentan." />
-            <Kpi etiqueta="Canceladas %" formato="pct" actual={canceladasPct(tot)} ayuda="Canceladas ÷ (asistió + no asistió + canceladas). Cuanto menor, mejor." />
-            <Kpi etiqueta="No asistieron" actual={tot.no_asistio} />
             <Kpi etiqueta="Canceladas" actual={tot.canceladas} />
+            <Kpi etiqueta="Porcentaje canceladas" formato="pct" actual={canceladasPct(tot)} ayuda="Canceladas ÷ (asistió + no asistió + canceladas). Cuanto menor, mejor." />
+            <Kpi etiqueta="No asistieron" actual={tot.no_asistio} />
+            <Kpi etiqueta="Porcentaje no asistencia" formato="pct" actual={noAsistioPct(tot)} ayuda="No asistió ÷ (asistió + no asistió + canceladas). Cuanto menor, mejor." />
             <Kpi etiqueta="Reprogramadas" actual={tot.reprogramadas} />
+            <Kpi etiqueta="Porcentaje reprogramación" formato="pct" actual={reprogramadasPct(tot)} ayuda="Reprogramadas ÷ (asistió + no asistió + canceladas + reprogramadas)." />
             <Kpi etiqueta="Programadas (por venir)" actual={tot.programadas} />
             {(tot.sin_cierre ?? 0) > 0 && <Kpi etiqueta="Sin cierre (no se sabe si ocurrió)" actual={tot.sin_cierre ?? 0} />}
           </div>
-          <Tarjeta titulo="Citas por estado" marcas={marcas} ayuda="Asistencia a citas realizadas = asistió ÷ (asistió + no asistió). Cumplimiento de agenda = asistió ÷ (asistió + no asistió + canceladas). Las anuladas (errores de registro) y las reprogramadas no se cuentan.">
+          <Tarjeta titulo="Citas por estado" marcas={marcas} ayuda="Porcentaje de asistencia = asistió ÷ (asistió + no asistió). Cumplimiento de agenda = asistió ÷ (asistió + no asistió + canceladas). Las anuladas (errores de registro) y las reprogramadas no se cuentan.">
             <Grafico opcion={optSerie} />
           </Tarjeta>
           <Tarjeta titulo="Por especialidad">
-            <Tabla filas={data.especialidad} columnas={COLS_ESP} nombreCsv="agenda_especialidad" />
+            <Tabla filas={data.especialidad} columnas={COLS_ESP} nombreCsv="agenda_especialidad" total={tot} />
           </Tarjeta>
           <Tarjeta titulo="Por profesional" ayuda="Haga clic en un encabezado para ordenar. La ficha completa está en Profesionales.">
-            <Tabla filas={data.profesional} columnas={COLS_PROF} nombreCsv={`agenda_profesional_${rango.desde}_${rango.hasta}`} />
+            <Tabla filas={data.profesional} columnas={COLS_PROF} nombreCsv={`agenda_profesional_${rango.desde}_${rango.hasta}`} total={totalPorEstado(data.profesional)} />
           </Tarjeta>
           {/* Todo lo que sigue es del plan Intermedio (agenda.desglose). Es un solo bloque para no llenar la pantalla de
               candados: el servidor ya entrega estas secciones vacías al Básico. */}
@@ -215,10 +208,10 @@ function AgendaPeriodo({ rango }: { rango: Rango }) {
               </Tarjeta>
             </div>
             <Tarjeta titulo="Por tipo de atención" ayuda="No ocurrieron = canceladas + reprogramadas. Horas perdidas: duración de esas citas.">
-              <Tabla filas={data.servicio} columnas={COLS_SERV} nombreCsv="agenda_tipo_atencion" />
+              <Tabla filas={data.servicio} columnas={COLS_SERV} nombreCsv="agenda_tipo_atencion" total={totalPorEstado(data.servicio)} />
             </Tarjeta>
-            <Tarjeta titulo="Por convenio / administradora" ayuda="Las 15 con más citas.">
-              <Tabla filas={data.administradora} columnas={COLS_ADM} nombreCsv="agenda_convenio" />
+            <Tarjeta titulo="Por convenio / administradora" ayuda="Las 15 con más citas. La fila TOTAL suma esas 15.">
+              <Tabla filas={data.administradora} columnas={COLS_ADM} nombreCsv="agenda_convenio" total={totalPorEstado(data.administradora)} />
             </Tarjeta>
             <Tarjeta titulo="Últimos cambios de estado" ayuda="Registro disponible desde fines de septiembre de 2026.">
               <Tabla filas={data.cambios} columnas={COLS_CAMBIO} nombreCsv="cambios_estado" vacio="Sin cambios registrados en este período" />

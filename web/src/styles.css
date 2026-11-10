@@ -691,3 +691,7 @@ button.enlace:disabled { opacity: 0.5; cursor: default; }
 .delta-celda.up { color: var(--up); }
 .delta-celda.down { color: var(--down); }
 .delta-celda.apagado { color: var(--muted); }
+
+/* Fila de totales de las tablas (Tabla total=…): fija al pie mientras se desplaza la tabla. */
+.fila-total td { position: sticky; bottom: 0; background: var(--surface-2); font-weight: 600; color: var(--ink); border-top: 1px solid var(--border); }
+.tabla-wrap .fila-total td:first-child { background: var(--surface-2); z-index: 2; }

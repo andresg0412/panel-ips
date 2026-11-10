@@ -12,6 +12,8 @@ interface Panorama {
   intervalos: { semana: number; n: number }[];
   perfil: { dimension: string; clave: string | null; n: number }[];
   resumenIntervalos: { n: number; p25: number; mediana: number; p75: number };
+  /** Pacientes cuya primera atención registrada cae en el período elegido. */
+  nuevosPeriodo: number;
 }
 
 export default function PacientesPanorama({ rango }: { rango: Rango }) {
@@ -89,6 +91,13 @@ export default function PacientesPanorama({ rango }: { rango: Rango }) {
           <div className="kpis">
             {/* "Atendidos" se calcula con el perfil y los días entre citas con los intervalos: sin el plan, se ocultan. */}
             {verPerfil && <Kpi etiqueta="Pacientes atendidos en el período" actual={atendidos} />}
+            <Kpi
+              etiqueta="Pacientes nuevos en el período"
+              actual={data.nuevosPeriodo}
+              ayuda={rango.desde < '2025-09-01'
+                ? 'Su primera atención registrada cae en el período. Agosto de 2025 es el inicio de los datos: ese mes incluye a quienes ya venían.'
+                : 'Su primera atención registrada cae en el período.'}
+            />
             <Kpi etiqueta="Pacientes nuevos por mes (promedio reciente)" actual={promNuevos} />
             {verPerfil && <Kpi etiqueta="Días típicos entre citas" valor={`${Math.round(ri.mediana)} días`} actual={null} />}
             {verPerfil && <Kpi etiqueta="La mitad vuelve entre" valor={`${Math.round(ri.p25)} y ${Math.round(ri.p75)} días`} actual={null} />}
